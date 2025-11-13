@@ -27,12 +27,14 @@ export async function main(): Promise<void> {
 }
 
 async function runBump(options: CliOptions): Promise<void> {
-  const cwd = await findGitRoot();
+  const gitRoot = await findGitRoot();
+  const workspaceCwd = process.cwd();
   logVerbose(options.verbose, "Options:", options);
-  logVerbose(options.verbose, "Working directory:", cwd);
+  logVerbose(options.verbose, "Git root:", gitRoot);
+  logVerbose(options.verbose, "Workspace directory:", workspaceCwd);
 
   logVerbose(options.verbose, "Discovering packages...");
-  const packages = await findWorkspacePackages(cwd);
+  const packages = await findWorkspacePackages(workspaceCwd);
   const publicCount = packages.filter(p => !p.private).length;
   logVerbose(
     options.verbose,
@@ -40,7 +42,7 @@ async function runBump(options: CliOptions): Promise<void> {
   );
 
   logVerbose(options.verbose, "Detecting changes since last release...");
-  const { changed } = await detectChangedPackages(packages, cwd);
+  const { changed } = await detectChangedPackages(packages, gitRoot);
   logVerbose(
     options.verbose,
     `Changed packages: ${Array.from(changed).join(", ")}`,
@@ -66,10 +68,10 @@ async function runBump(options: CliOptions): Promise<void> {
     options.type,
     options.dryRun,
   );
-  await displayResults(results, packages, options, cwd);
+  await displayResults(results, packages, options, gitRoot);
 
   if (!options.dryRun && !options.noCommit) {
-    await performGitOps(results, options, cwd);
+    await performGitOps(results, options, gitRoot);
   }
 }
 

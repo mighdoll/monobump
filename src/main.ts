@@ -99,15 +99,25 @@ async function performGitOps(
   options: CliOptions,
   cwd: string,
 ) {
-  const newVersion = results[0]?.newVersion;
-  if (!newVersion) return;
+  if (results.length === 0) return;
+
+  // Create commit with appropriate message
+  const versions = new Set(results.map(r => r.newVersion));
+  const commitMessage =
+    versions.size === 1
+      ? `chore: release v${results[0].newVersion}`
+      : `chore: release ${results.map(r => `${r.package}@${r.newVersion}`).join(", ")}`;
 
   console.log("\nCreating commit...");
-  await createCommit(`chore: release v${newVersion}`, cwd);
+  await createCommit(commitMessage, cwd);
 
   if (options.tag) {
-    console.log(`Creating tag v${newVersion}...`);
-    await createTag(`v${newVersion}`, cwd);
+    // Create per-package tags
+    for (const result of results) {
+      const tag = `${result.package}@${result.newVersion}`;
+      console.log(`Creating tag ${tag}...`);
+      await createTag(tag, cwd);
+    }
   }
 
   if (options.push) {

@@ -456,13 +456,14 @@ async function displayResults(results, packages, options, cwd) {
 	if (options.dryRun) console.log("\nDry run - no changes made.");
 }
 async function performGitOps(results, options, cwd) {
-	const newVersion = results[0]?.newVersion;
-	if (!newVersion) return;
+	if (results.length === 0) return;
+	const commitMessage = new Set(results.map((r) => r.newVersion)).size === 1 ? `chore: release v${results[0].newVersion}` : `chore: release ${results.map((r) => `${r.package}@${r.newVersion}`).join(", ")}`;
 	console.log("\nCreating commit...");
-	await createCommit(`chore: release v${newVersion}`, cwd);
-	if (options.tag) {
-		console.log(`Creating tag v${newVersion}...`);
-		await createTag(`v${newVersion}`, cwd);
+	await createCommit(commitMessage, cwd);
+	if (options.tag) for (const result of results) {
+		const tag = `${result.package}@${result.newVersion}`;
+		console.log(`Creating tag ${tag}...`);
+		await createTag(tag, cwd);
 	}
 	if (options.push) {
 		console.log("Pushing to remote...");

@@ -409,6 +409,7 @@ function parseWorkspaceJson(stdout) {
 
 //#endregion
 //#region src/main.ts
+main();
 async function main() {
 	const options = parseCliArgs();
 	try {
@@ -471,8 +472,4 @@ function logVerbose(verbose, ...args) {
 }
 
 //#endregion
-//#region src/index.ts
-main();
-
-//#endregion
-export {  };
+export { main };

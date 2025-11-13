@@ -144,18 +144,18 @@ async function findLastReleaseCommit(cwd = process.cwd()) {
 }
 /** Get all files changed since a specific commit */
 async function getChangedFiles(since, cwd = process.cwd()) {
-	const { stdout } = await exec$3(`git diff --name-only ${since ? `${since}..HEAD` : "HEAD"}`, { cwd });
+	const { stdout } = await exec$3(`git diff --name-only ${since ? `${since}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`}`, { cwd });
 	return stdout.trim().split("\n").filter(Boolean);
 }
 /** Get commit history for changed files since last release */
 async function getCommitHistory(since, cwd = process.cwd()) {
-	const { stdout } = await exec$3(`git log --oneline ${since ? `${since}..HEAD` : "HEAD"}`, { cwd });
+	const { stdout } = await exec$3(`git log --oneline ${since ? `${since}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`}`, { cwd });
 	return stdout.trim().split("\n").filter(Boolean).map(parseCommitLine).filter((commit) => commit !== null);
 }
 /** Get commits that touched specific files/directories */
 async function getCommitsForPaths(paths, since, cwd = process.cwd()) {
 	if (paths.length === 0) return [];
-	const { stdout } = await exec$3(`git log --oneline ${since ? `${since}..HEAD` : "HEAD"} -- ${paths.join(" ")}`, { cwd });
+	const { stdout } = await exec$3(`git log --oneline ${since ? `${since}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`} -- ${paths.join(" ")}`, { cwd });
 	return stdout.trim().split("\n").filter(Boolean).map(parseCommitLine).filter((commit) => commit !== null);
 }
 function parseCommitLine(line) {
@@ -471,4 +471,8 @@ function logVerbose(verbose, ...args) {
 }
 
 //#endregion
-export { main };
+//#region src/index.ts
+main();
+
+//#endregion
+export {  };

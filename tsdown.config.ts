@@ -9,7 +9,7 @@ const thisPath = import.meta.url;
 const binPath = new URL(toBin, thisPath).pathname;
 
 export default defineConfig({
-  entry: ["./src/main.ts"],
+  entry: ["./src/index.ts"],
   target: "node22",
   clean: true,
   platform: "node",

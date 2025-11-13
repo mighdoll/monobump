@@ -33,7 +33,10 @@ export async function getChangedFiles(
   since: string | null,
   cwd: string = process.cwd(),
 ): Promise<string[]> {
-  const range = since ? `${since}..HEAD` : "HEAD";
+  // If no previous release, compare against first commit (initial release)
+  const range = since
+    ? `${since}..HEAD`
+    : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
   const { stdout } = await exec(`git diff --name-only ${range}`, { cwd });
   return stdout.trim().split("\n").filter(Boolean);
 }
@@ -43,7 +46,10 @@ export async function getCommitHistory(
   since: string | null,
   cwd: string = process.cwd(),
 ): Promise<CommitInfo[]> {
-  const range = since ? `${since}..HEAD` : "HEAD";
+  // If no previous release, get all commits (initial release)
+  const range = since
+    ? `${since}..HEAD`
+    : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
   const { stdout } = await exec(`git log --oneline ${range}`, { cwd });
   return stdout
     .trim()
@@ -60,7 +66,10 @@ export async function getCommitsForPaths(
   cwd: string = process.cwd(),
 ): Promise<CommitInfo[]> {
   if (paths.length === 0) return [];
-  const range = since ? `${since}..HEAD` : "HEAD";
+  // If no previous release, get all commits (initial release)
+  const range = since
+    ? `${since}..HEAD`
+    : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
   const pathArgs = paths.join(" ");
   const { stdout } = await exec(`git log --oneline ${range} -- ${pathArgs}`, {
     cwd,

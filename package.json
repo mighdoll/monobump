@@ -1,0 +1,40 @@
+{
+  "name": "monobump",
+  "description": "Smart version bumping for pnpm monorepos - only bumps changed packages and their dependents",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": "./bin/monobump",
+  "files": [
+    "bin",
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mighdoll/monobump.git"
+  },
+  "scripts": {
+    "test": "vitest",
+    "test:once": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  },
+  "peerDependencies": {
+    "pnpm": ">=9.0.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "bump",
+    "monorepo",
+    "pnpm",
+    "release",
+    "semver",
+    "version"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

@@ -5,20 +5,22 @@
   "type": "module",
   "bin": "./bin/monobump",
   "files": [
-    "bin",
-    "src"
+    "bin"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/mighdoll/monobump.git"
   },
   "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "pnpm build",
     "test": "vitest",
     "test:once": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "tsdown": "^0.16.4",
     "typescript": "^5.9.3",
     "vitest": "^4.0.8"
   },

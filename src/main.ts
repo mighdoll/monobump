@@ -13,7 +13,7 @@ import { findWorkspacePackages } from "./Pnpm.ts";
 main();
 
 export async function main(): Promise<void> {
-  const options = parseCliArgs();
+  const options = await parseCliArgs();
 
   try {
     await runBump(options);

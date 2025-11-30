@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { BumpType } from "./Bump.ts";
 
@@ -13,7 +16,7 @@ export interface CliOptions {
 }
 
 /** Parse command line arguments and return options */
-export function parseCliArgs(): CliOptions {
+export async function parseCliArgs(): Promise<CliOptions> {
   const { values } = parseArgs({
     options: {
       type: { type: "string", short: "t", default: "patch" },
@@ -23,11 +26,20 @@ export function parseCliArgs(): CliOptions {
       tag: { type: "boolean", default: true },
       push: { type: "boolean", default: false },
       verbose: { type: "boolean", short: "v", default: false },
+      version: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
     allowPositionals: true,
     allowNegative: true,
   });
+
+  if (values.version) {
+    const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.join(scriptDir, "..", "package.json");
+    const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8"));
+    console.log(pkg.version);
+    process.exit(0);
+  }
 
   if (values.help) {
     printHelp();
@@ -67,6 +79,7 @@ Options:
   --tag, --no-tag        Create git tags (default: true)
   --push                 Push commit and tags to remote
   -v, --verbose          Show verbose output
+  -V, --version          Show version number
   -h, --help             Show this help message
 
 Examples:

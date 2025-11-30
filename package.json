@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsdown",
+    "bump": "pnpm build && node ./bin/monobump",
     "prepublishOnly": "pnpm build",
     "test": "vitest",
     "test:once": "vitest run",

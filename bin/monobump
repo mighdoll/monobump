@@ -273,8 +273,7 @@ function parseCliArgs() {
 			},
 			commit: {
 				type: "boolean",
-				default: true,
-				negatable: true
+				default: true
 			},
 			tag: {
 				type: "boolean",
@@ -295,7 +294,8 @@ function parseCliArgs() {
 				default: false
 			}
 		},
-		allowPositionals: true
+		allowPositionals: true,
+		allowNegative: true
 	});
 	if (values.help) {
 		printHelp();
@@ -330,8 +330,8 @@ Options:
   -t, --type <type>      Bump type: major, minor, or patch (default: patch)
   --dry-run              Show what would be bumped without making changes
   --changelog            Output changelog markdown grouped by package
-  --no-commit            Skip creating a git commit
-  --tag                  Create a git tag (default: true)
+  --commit, --no-commit  Create a git commit (default: true)
+  --tag, --no-tag        Create git tags (default: true)
   --push                 Push commit and tags to remote
   -v, --verbose          Show verbose output
   -h, --help             Show this help message

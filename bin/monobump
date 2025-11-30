@@ -3,6 +3,7 @@ import fs, { realpath } from "node:fs/promises";
 import path from "node:path";
 import { exec } from "node:child_process";
 import { parseArgs, promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
 
 //#region src/Bump.ts
@@ -255,7 +256,7 @@ function formatResults(results) {
 //#endregion
 //#region src/Cli.ts
 /** Parse command line arguments and return options */
-function parseCliArgs() {
+async function parseCliArgs() {
 	const { values } = parseArgs({
 		options: {
 			type: {
@@ -288,6 +289,10 @@ function parseCliArgs() {
 				short: "v",
 				default: false
 			},
+			version: {
+				type: "boolean",
+				default: false
+			},
 			help: {
 				type: "boolean",
 				short: "h",
@@ -297,6 +302,13 @@ function parseCliArgs() {
 		allowPositionals: true,
 		allowNegative: true
 	});
+	if (values.version) {
+		const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+		const pkgPath = path.join(scriptDir, "..", "package.json");
+		const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8"));
+		console.log(pkg.version);
+		process.exit(0);
+	}
 	if (values.help) {
 		printHelp();
 		process.exit(0);
@@ -334,6 +346,7 @@ Options:
   --tag, --no-tag        Create git tags (default: true)
   --push                 Push commit and tags to remote
   -v, --verbose          Show verbose output
+  -V, --version          Show version number
   -h, --help             Show this help message
 
 Examples:
@@ -412,7 +425,7 @@ function parseWorkspaceJson(stdout) {
 //#region src/main.ts
 main();
 async function main() {
-	const options = parseCliArgs();
+	const options = await parseCliArgs();
 	try {
 		await runBump(options);
 	} catch (error) {

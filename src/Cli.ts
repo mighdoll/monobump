@@ -6,7 +6,7 @@ export interface CliOptions {
   type: BumpType;
   dryRun: boolean;
   changelog: boolean;
-  noCommit: boolean;
+  commit: boolean;
   tag: boolean;
   push: boolean;
   verbose: boolean;
@@ -19,13 +19,14 @@ export function parseCliArgs(): CliOptions {
       type: { type: "string", short: "t", default: "patch" },
       "dry-run": { type: "boolean", default: false },
       changelog: { type: "boolean", default: false },
-      "no-commit": { type: "boolean", default: false },
+      commit: { type: "boolean", default: true },
       tag: { type: "boolean", default: true },
       push: { type: "boolean", default: false },
       verbose: { type: "boolean", short: "v", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
     allowPositionals: true,
+    allowNegative: true,
   });
 
   if (values.help) {
@@ -45,7 +46,7 @@ export function parseCliArgs(): CliOptions {
     type: type as BumpType,
     dryRun: values["dry-run"] as boolean,
     changelog: values.changelog as boolean,
-    noCommit: values["no-commit"] as boolean,
+    commit: values.commit as boolean,
     tag: values.tag as boolean,
     push: values.push as boolean,
     verbose: values.verbose as boolean,
@@ -62,8 +63,8 @@ Options:
   -t, --type <type>      Bump type: major, minor, or patch (default: patch)
   --dry-run              Show what would be bumped without making changes
   --changelog            Output changelog markdown grouped by package
-  --no-commit            Don't create a git commit
-  --tag                  Create a git tag (default: true)
+  --commit, --no-commit  Create a git commit (default: true)
+  --tag, --no-tag        Create git tags (default: true)
   --push                 Push commit and tags to remote
   -v, --verbose          Show verbose output
   -h, --help             Show this help message

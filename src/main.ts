@@ -70,7 +70,7 @@ async function runBump(options: CliOptions): Promise<void> {
   );
   await displayResults(results, packages, options, gitRoot);
 
-  if (!options.dryRun && !options.noCommit) {
+  if (!options.dryRun && options.commit) {
     await performGitOps(results, options, gitRoot);
   }
 }

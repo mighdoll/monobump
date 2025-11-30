@@ -271,9 +271,10 @@ function parseCliArgs() {
 				type: "boolean",
 				default: false
 			},
-			"no-commit": {
+			commit: {
 				type: "boolean",
-				default: false
+				default: true,
+				negatable: true
 			},
 			tag: {
 				type: "boolean",
@@ -313,7 +314,7 @@ function parseCliArgs() {
 		type,
 		dryRun: values["dry-run"],
 		changelog: values.changelog,
-		noCommit: values["no-commit"],
+		commit: values.commit,
 		tag: values.tag,
 		push: values.push,
 		verbose: values.verbose
@@ -329,7 +330,7 @@ Options:
   -t, --type <type>      Bump type: major, minor, or patch (default: patch)
   --dry-run              Show what would be bumped without making changes
   --changelog            Output changelog markdown grouped by package
-  --no-commit            Don't create a git commit
+  --no-commit            Skip creating a git commit
   --tag                  Create a git tag (default: true)
   --push                 Push commit and tags to remote
   -v, --verbose          Show verbose output
@@ -444,7 +445,7 @@ async function runBump(options) {
 	}
 	const results = await bumpPackages(packages, toBump, reasons, options.type, options.dryRun);
 	await displayResults(results, packages, options, gitRoot);
-	if (!options.dryRun && !options.noCommit) await performGitOps(results, options, gitRoot);
+	if (!options.dryRun && options.commit) await performGitOps(results, options, gitRoot);
 }
 async function displayResults(results, packages, options, cwd) {
 	console.log(formatResults(results));

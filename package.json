@@ -3,18 +3,18 @@
   "description": "Smart version bumping for pnpm monorepos - only bumps changed packages and their dependents",
   "version": "0.1.5",
   "type": "module",
-  "bin": "./bin/monobump",
+  "bin": "./bin/monobump.ts",
   "files": [
-    "bin"
+    "bin/",
+    "src/"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/mighdoll/monobump.git"
   },
   "scripts": {
-    "build": "tsdown",
-    "bump": "pnpm build && node ./bin/monobump",
-    "prepublishOnly": "pnpm build",
+    "bump": "./bin/monobump.ts",
+    "global": "pnpm link --global",
     "test": "vitest",
     "test:once": "vitest run",
     "typecheck": "tsgo --noEmit"
@@ -22,7 +22,6 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@typescript/native-preview": "7.0.0-dev.20251130.1",
-    "tsdown": "^0.16.4",
     "vitest": "^4.0.8"
   },
   "peerDependencies": {
@@ -38,6 +37,6 @@
     "version"
   ],
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.6.0"
   }
 }

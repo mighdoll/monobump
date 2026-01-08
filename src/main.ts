@@ -9,9 +9,6 @@ import { createCommit, createTag, findGitRoot, push } from "./Git.ts";
 import type { Package } from "./Pnpm.ts";
 import { findWorkspacePackages } from "./Pnpm.ts";
 
-// Run the CLI
-main();
-
 export async function main(): Promise<void> {
   const options = await parseCliArgs();
 

@@ -13,11 +13,12 @@ export interface CliOptions {
   tag: boolean;
   push: boolean;
   verbose: boolean;
+  packages: string[];
 }
 
 /** Parse command line arguments and return options */
 export async function parseCliArgs(): Promise<CliOptions> {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     options: {
       type: { type: "string", short: "t", default: "patch" },
       "dry-run": { type: "boolean", default: false },
@@ -62,6 +63,7 @@ export async function parseCliArgs(): Promise<CliOptions> {
     tag: values.tag as boolean,
     push: values.push as boolean,
     verbose: values.verbose as boolean,
+    packages: positionals,
   };
 }
 
@@ -69,7 +71,10 @@ function printHelp(): void {
   console.log(`
 monobump - Smart version bumping for pnpm monorepos
 
-Usage: monobump [options]
+Usage: monobump [options] [packages...]
+
+Arguments:
+  packages               Package names to bump (if omitted, auto-detects changed packages)
 
 Options:
   -t, --type <type>      Bump type: major, minor, patch, alpha, beta, rc (default: patch)
@@ -89,7 +94,9 @@ Prerelease behavior:
   patch/minor/major from pre   Graduates to stable (0.7.0-a1 -> 0.7.0)
 
 Examples:
-  monobump                          # Bump patch version
+  monobump                          # Bump patch version (auto-detect changes)
+  monobump @myorg/pkg-a             # Bump only @myorg/pkg-a
+  monobump pkg-a pkg-b --type minor # Bump specific packages with minor version
   monobump --type minor --dry-run   # Preview minor version bump
   monobump --type alpha             # Start or increment alpha prerelease
   monobump --changelog              # Bump and output changelog

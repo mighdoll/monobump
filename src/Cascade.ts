@@ -83,6 +83,63 @@ function findAffectedDependency(
   return null;
 }
 
+/** Get packages to bump in explicit mode: specified packages + their dependencies that have changes */
+export async function getPackagesWithChangedDeps(
+  packages: Package[],
+  specifiedPackages: Set<string>,
+  changedPackages: Set<string>,
+): Promise<{ toBump: Set<string>; reasons: Map<string, string> }> {
+  const publicPackages = packages.filter(pkg => !pkg.private);
+  const publicPackageNames = new Set(publicPackages.map(pkg => pkg.name));
+
+  // Filter specified to public only
+  const specifiedPublic = new Set(
+    [...specifiedPackages].filter(name => publicPackageNames.has(name)),
+  );
+
+  const graph = await buildDependencyGraph(publicPackages);
+  const toBump = new Set(specifiedPublic);
+  const reasons = new Map<string, string>();
+
+  // Mark specified packages as "specified"
+  for (const pkgName of specifiedPublic) {
+    reasons.set(pkgName, "specified");
+  }
+
+  // For each specified package, find dependencies that have unpublished changes
+  for (const pkgName of specifiedPublic) {
+    const pkg = graph.get(pkgName);
+    if (!pkg) continue;
+
+    for (const depName of pkg.dependencies) {
+      if (changedPackages.has(depName) && !toBump.has(depName)) {
+        toBump.add(depName);
+        reasons.set(depName, `dependency of ${pkgName}`);
+      }
+    }
+  }
+
+  // Recursively find dependencies of dependencies that have changes
+  let hasChanges = true;
+  while (hasChanges) {
+    hasChanges = false;
+    for (const pkgName of [...toBump]) {
+      const pkg = graph.get(pkgName);
+      if (!pkg) continue;
+
+      for (const depName of pkg.dependencies) {
+        if (changedPackages.has(depName) && !toBump.has(depName)) {
+          toBump.add(depName);
+          reasons.set(depName, `dependency of ${pkgName}`);
+          hasChanges = true;
+        }
+      }
+    }
+  }
+
+  return { toBump, reasons };
+}
+
 /** Get packages to bump: changed packages + their dependents, excluding private packages */
 export async function getPackagesToBump(
   packages: Package[],

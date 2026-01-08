@@ -1,6 +1,6 @@
 import type { BumpResult } from "./Bump.ts";
 import { bumpPackages } from "./Bump.ts";
-import { getPackagesToBump } from "./Cascade.ts";
+import { getPackagesToBump, getPackagesWithChangedDeps } from "./Cascade.ts";
 import { formatChangelog, formatResults } from "./Changelog.ts";
 import type { CliOptions } from "./Cli.ts";
 import { parseCliArgs } from "./Cli.ts";
@@ -38,6 +38,7 @@ async function runBump(options: CliOptions): Promise<void> {
     `Found ${packages.length} packages (${publicCount} public)`,
   );
 
+  // Always detect changed packages (needed for both modes)
   logVerbose(options.verbose, "Detecting changes since last release...");
   const { changed } = await detectChangedPackages(packages, gitRoot);
   logVerbose(
@@ -45,13 +46,38 @@ async function runBump(options: CliOptions): Promise<void> {
     `Changed packages: ${Array.from(changed).join(", ")}`,
   );
 
-  if (changed.size === 0) {
-    console.log("No changes detected. Nothing to bump!");
-    return;
-  }
+  let toBump: Set<string>;
+  let reasons: Map<string, string>;
 
-  logVerbose(options.verbose, "Computing dependency cascade...");
-  const { toBump, reasons } = await getPackagesToBump(packages, changed);
+  if (options.packages.length > 0) {
+    // Explicit mode: cascade DOWN to dependencies with changes
+    const packageNames = new Set(packages.map(p => p.name));
+    const invalidPackages = options.packages.filter(p => !packageNames.has(p));
+    if (invalidPackages.length > 0) {
+      throw new Error(`Unknown package(s): ${invalidPackages.join(", ")}`);
+    }
+    const specifiedPackages = new Set(options.packages);
+    logVerbose(
+      options.verbose,
+      `Specified packages: ${Array.from(specifiedPackages).join(", ")}`,
+    );
+
+    logVerbose(options.verbose, "Finding dependencies with changes...");
+    const result = await getPackagesWithChangedDeps(packages, specifiedPackages, changed);
+    toBump = result.toBump;
+    reasons = result.reasons;
+  } else {
+    // Auto-detect mode: cascade UP to dependents
+    if (changed.size === 0) {
+      console.log("No changes detected. Nothing to bump!");
+      return;
+    }
+
+    logVerbose(options.verbose, "Computing dependency cascade...");
+    const result = await getPackagesToBump(packages, changed);
+    toBump = result.toBump;
+    reasons = result.reasons;
+  }
 
   if (toBump.size === 0) {
     console.log("No public packages affected. Nothing to bump!");

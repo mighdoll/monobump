@@ -24,9 +24,6 @@
     "@typescript/native-preview": "7.0.0-dev.20251130.1",
     "vitest": "^4.0.8"
   },
-  "peerDependencies": {
-    "pnpm": ">=9.0.0"
-  },
   "license": "MIT",
   "keywords": [
     "bump",

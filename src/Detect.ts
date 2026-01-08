@@ -191,7 +191,7 @@ async function packageHasChanges(
     // Resolve symlinks to ensure consistent paths (e.g., /tmp vs /private/tmp on macOS)
     const realCwd = await realpath(cwd);
     const realPkgPath = await realpath(pkg.path);
-    const pkgRelPath = path.relative(realCwd, realPkgPath);
+    const pkgRelPath = path.relative(realCwd, realPkgPath) || ".";
     const { stdout } = await exec(
       `git diff --name-only ${gitRange(lastTag)} -- "${pkgRelPath}"`,
       { cwd: realCwd },

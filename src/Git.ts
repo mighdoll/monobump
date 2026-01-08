@@ -1,11 +1,8 @@
-import { exec as execCallback } from "node:child_process";
-import { promisify } from "node:util";
-
-const execAsync = promisify(execCallback);
+import { exec } from "./Exec.ts";
 
 /** Execute a git command in the specified directory */
 async function git(command: string, cwd: string): Promise<string> {
-  const { stdout } = await execAsync(`git ${command}`, { cwd });
+  const { stdout } = await exec(`git ${command}`, { cwd });
   return stdout.trim();
 }
 

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Package } from "./Pnpm.ts";
+import { readPackageJson, type Package } from "./Pnpm.ts";
 
 /** Semantic version bump type */
 export type BumpType = "major" | "minor" | "patch" | "alpha" | "beta" | "rc";
@@ -117,8 +117,7 @@ export async function updatePackageVersion(
   newVersion: string,
 ): Promise<void> {
   const packageJsonPath = path.join(packagePath, "package.json");
-  const content = await fs.readFile(packageJsonPath, "utf-8");
-  const packageJson = JSON.parse(content);
+  const packageJson = await readPackageJson(packagePath);
 
   packageJson.version = newVersion;
 

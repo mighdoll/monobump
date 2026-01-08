@@ -1,6 +1,16 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import type { Package } from "./Pnpm.ts";
+import { readPackageJson, type Package } from "./Pnpm.ts";
+
+/** Filter to public packages and return their names as a Set */
+function getPublicPackages(packages: Package[]): {
+  packages: Package[];
+  names: Set<string>;
+} {
+  const publicPackages = packages.filter(pkg => !pkg.private);
+  return {
+    packages: publicPackages,
+    names: new Set(publicPackages.map(pkg => pkg.name)),
+  };
+}
 
 /** Package with resolved workspace dependencies */
 export interface PackageWithDeps extends Package {
@@ -28,9 +38,7 @@ const dependencySections = [
 ] as const;
 
 async function getWorkspaceDeps(pkgPath: string): Promise<Set<string>> {
-  const packageJsonPath = path.join(pkgPath, "package.json");
-  const content = await fs.readFile(packageJsonPath, "utf-8");
-  const packageJson = JSON.parse(content);
+  const packageJson = await readPackageJson(pkgPath);
 
   const workspaceDeps = dependencySections.flatMap(section => {
     const deps = packageJson[section];
@@ -76,8 +84,8 @@ export async function getPackagesWithChangedDeps(
   specifiedPackages: Set<string>,
   changedPackages: Set<string>,
 ): Promise<{ toBump: Set<string>; reasons: Map<string, string> }> {
-  const publicPackages = packages.filter(pkg => !pkg.private);
-  const publicPackageNames = new Set(publicPackages.map(pkg => pkg.name));
+  const { packages: publicPackages, names: publicPackageNames } =
+    getPublicPackages(packages);
 
   // Filter specified to public only
   const specifiedPublic = new Set(
@@ -119,8 +127,8 @@ export async function getPackagesToBump(
   packages: Package[],
   changedPackages: Set<string>,
 ): Promise<{ toBump: Set<string>; reasons: Map<string, string> }> {
-  const publicPackages = packages.filter(pkg => !pkg.private);
-  const publicPackageNames = new Set(publicPackages.map(pkg => pkg.name));
+  const { packages: publicPackages, names: publicPackageNames } =
+    getPublicPackages(packages);
 
   // Filter changed to public only
   const changedPublic = new Set(

@@ -1,9 +1,16 @@
-import { exec as execCallback } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { exec } from "./Exec.ts";
 
-const exec = promisify(execCallback);
+/** Read and parse a package.json file */
+export async function readPackageJson(
+  pkgPath: string,
+): Promise<Record<string, unknown>> {
+  const packageJsonPath = path.join(pkgPath, "package.json");
+  const content = await fs.readFile(packageJsonPath, "utf-8");
+  return JSON.parse(content);
+}
 
 /** Represents a package in the pnpm workspace */
 export interface Package {

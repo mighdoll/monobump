@@ -1,10 +1,7 @@
-import { exec as execCallback } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { exec } from "./Exec.ts";
 import type { Package } from "./Pnpm.ts";
-
-const exec = promisify(execCallback);
 
 /** Build git range from optional starting commit to HEAD */
 function gitRange(since: string | null): string {

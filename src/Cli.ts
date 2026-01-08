@@ -18,36 +18,35 @@ export interface CliOptions {
 
 const BUMP_TYPES: BumpType[] = ["major", "minor", "patch", "alpha", "beta", "rc"];
 
+const CLI_OPTIONS = {
+  // Bump type flags
+  major: { type: "boolean", default: false },
+  minor: { type: "boolean", default: false },
+  patch: { type: "boolean", default: false },
+  alpha: { type: "boolean", default: false },
+  beta: { type: "boolean", default: false },
+  rc: { type: "boolean", default: false },
+  // Other options
+  "dry-run": { type: "boolean", default: false },
+  changelog: { type: "boolean", default: false },
+  commit: { type: "boolean", default: true },
+  tag: { type: "boolean", default: true },
+  push: { type: "boolean", default: false },
+  verbose: { type: "boolean", short: "v", default: false },
+  version: { type: "boolean", default: false },
+  help: { type: "boolean", short: "h", default: false },
+} as const;
+
 /** Parse command line arguments and return options */
 export async function parseCliArgs(): Promise<CliOptions> {
   const { values, positionals } = parseArgs({
-    options: {
-      // Bump type flags
-      major: { type: "boolean", default: false },
-      minor: { type: "boolean", default: false },
-      patch: { type: "boolean", default: false },
-      alpha: { type: "boolean", default: false },
-      beta: { type: "boolean", default: false },
-      rc: { type: "boolean", default: false },
-      // Other options
-      "dry-run": { type: "boolean", default: false },
-      changelog: { type: "boolean", default: false },
-      commit: { type: "boolean", default: true },
-      tag: { type: "boolean", default: true },
-      push: { type: "boolean", default: false },
-      verbose: { type: "boolean", short: "v", default: false },
-      version: { type: "boolean", default: false },
-      help: { type: "boolean", short: "h", default: false },
-    },
+    options: CLI_OPTIONS,
     allowPositionals: true,
     allowNegative: true,
   });
 
   if (values.version) {
-    const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.join(scriptDir, "..", "package.json");
-    const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8"));
-    console.log(pkg.version);
+    await printVersion();
     process.exit(0);
   }
 
@@ -56,24 +55,38 @@ export async function parseCliArgs(): Promise<CliOptions> {
     process.exit(0);
   }
 
-  // Determine bump type from flags
-  const selectedTypes = BUMP_TYPES.filter(t => values[t]);
-  if (selectedTypes.length > 1) {
-    console.error(`Only one bump type allowed. Got: ${selectedTypes.join(", ")}`);
-    process.exit(1);
-  }
-  const type: BumpType = selectedTypes[0] ?? "patch";
+  const bumpType = resolveBumpType(values);
 
   return {
-    type,
-    dryRun: values["dry-run"] as boolean,
-    changelog: values.changelog as boolean,
-    commit: values.commit as boolean,
-    tag: values.tag as boolean,
-    push: values.push as boolean,
-    verbose: values.verbose as boolean,
+    type: bumpType,
+    dryRun: Boolean(values["dry-run"]),
+    changelog: Boolean(values.changelog),
+    commit: Boolean(values.commit),
+    tag: Boolean(values.tag),
+    push: Boolean(values.push),
+    verbose: Boolean(values.verbose),
     packages: positionals,
   };
+}
+
+/** Read and print the package version from package.json */
+async function printVersion(): Promise<void> {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const pkgPath = path.join(scriptDir, "..", "package.json");
+  const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8"));
+  console.log(pkg.version);
+}
+
+/** Resolve bump type from CLI flags, defaulting to patch */
+function resolveBumpType(values: Record<string, unknown>): BumpType {
+  const enabledTypes = BUMP_TYPES.filter(t => values[t]);
+
+  if (enabledTypes.length > 1) {
+    console.error(`Only one bump type allowed. Got: ${enabledTypes.join(", ")}`);
+    process.exit(1);
+  }
+
+  return enabledTypes[0] ?? "patch";
 }
 
 function printHelp(): void {

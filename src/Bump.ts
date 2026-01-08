@@ -22,36 +22,35 @@ interface ParsedVersion {
   prerelease?: { type: PrereleaseType; num: number };
 }
 
+/** Mapping from short prerelease prefix to full type name */
+const prefixToType: Record<string, PrereleaseType> = {
+  a: "alpha",
+  b: "beta",
+  rc: "rc",
+};
+
 /** Parse a version string into components */
 export function parseVersion(version: string): ParsedVersion {
   // Match: major.minor.patch[-prerelease]
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(a|b|rc)(\d+))?$/);
-  if (!match) {
-    throw new Error(`Invalid version: ${version}`);
-  }
+  if (!match) throw new Error(`Invalid version: ${version}`);
 
   const [, major, minor, patch, preType, preNum] = match;
-  const result: ParsedVersion = {
+  return {
     major: Number(major),
     minor: Number(minor),
     patch: Number(patch),
+    ...(preType && {
+      prerelease: { type: prefixToType[preType], num: Number(preNum) },
+    }),
   };
-
-  if (preType) {
-    const typeMap: Record<string, PrereleaseType> = { a: "alpha", b: "beta", rc: "rc" };
-    result.prerelease = { type: typeMap[preType], num: Number(preNum) };
-  }
-
-  return result;
 }
 
 /** Format a parsed version back to string */
-function formatVersion(v: ParsedVersion): string {
-  const base = `${v.major}.${v.minor}.${v.patch}`;
-  if (v.prerelease) {
-    return `${base}-${prereleasePrefix[v.prerelease.type]}${v.prerelease.num}`;
-  }
-  return base;
+function formatVersion(ver: ParsedVersion): string {
+  const base = `${ver.major}.${ver.minor}.${ver.patch}`;
+  if (!ver.prerelease) return base;
+  return `${base}-${prereleasePrefix[ver.prerelease.type]}${ver.prerelease.num}`;
 }
 
 /** Result of bumping a package version */
@@ -62,59 +61,54 @@ export interface BumpResult {
   reason: string;
 }
 
+/** Check if bump type is a stable version bump */
+function isStableBump(type: BumpType): type is "major" | "minor" | "patch" {
+  return type === "major" || type === "minor" || type === "patch";
+}
+
+/** Graduate prerelease to stable, applying the bump type */
+function graduateToStable(ver: ParsedVersion, type: "major" | "minor" | "patch"): ParsedVersion {
+  // For patch, just remove prerelease (0.7.0-a1 -> 0.7.0)
+  if (type === "patch") return { ...ver, prerelease: undefined };
+  // For minor: bump minor, reset patch (0.7.0-a1 -> 0.8.0)
+  if (type === "minor") return { ...ver, minor: ver.minor + 1, patch: 0, prerelease: undefined };
+  // For major: bump major, reset minor and patch (0.7.0-a1 -> 1.0.0)
+  return { major: ver.major + 1, minor: 0, patch: 0 };
+}
+
+/** Apply stable bump to a stable version */
+function applyStableBump(ver: ParsedVersion, type: "major" | "minor" | "patch"): ParsedVersion {
+  if (type === "major") return { major: ver.major + 1, minor: 0, patch: 0 };
+  if (type === "minor") return { ...ver, minor: ver.minor + 1, patch: 0 };
+  return { ...ver, patch: ver.patch + 1 };
+}
+
+/** Apply prerelease bump */
+function applyPrereleaseBump(ver: ParsedVersion, type: PrereleaseType): ParsedVersion {
+  // Already in prerelease of same type: increment (0.7.0-a1 -> 0.7.0-a2)
+  if (ver.prerelease?.type === type) {
+    return { ...ver, prerelease: { type, num: ver.prerelease.num + 1 } };
+  }
+  // Different prerelease type: start at 1 (0.7.0-a2 -> 0.7.0-b1)
+  if (ver.prerelease) {
+    return { ...ver, prerelease: { type, num: 1 } };
+  }
+  // Starting prerelease from stable: bump minor (0.7.0 + alpha -> 0.8.0-a1)
+  return { ...ver, minor: ver.minor + 1, patch: 0, prerelease: { type, num: 1 } };
+}
+
 /** Bump a semver version */
 export function bumpVersion(version: string, type: BumpType): string {
-  const v = parseVersion(version);
+  const parsed = parseVersion(version);
 
-  // Handle stable version bumps (major/minor/patch)
-  if (type === "major" || type === "minor" || type === "patch") {
-    // If currently prerelease, graduate to stable base version
-    if (v.prerelease) {
-      delete v.prerelease;
-      // For patch, just remove prerelease (0.7.0-a1 -> 0.7.0)
-      // For minor/major, bump accordingly
-      if (type === "minor") {
-        v.minor++;
-        v.patch = 0;
-      } else if (type === "major") {
-        v.major++;
-        v.minor = 0;
-        v.patch = 0;
-      }
-      return formatVersion(v);
-    }
-    // Normal stable bump
-    switch (type) {
-      case "major":
-        return `${v.major + 1}.0.0`;
-      case "minor":
-        return `${v.major}.${v.minor + 1}.0`;
-      case "patch":
-        return `${v.major}.${v.minor}.${v.patch + 1}`;
-    }
+  if (isStableBump(type)) {
+    const bumped = parsed.prerelease
+      ? graduateToStable(parsed, type)
+      : applyStableBump(parsed, type);
+    return formatVersion(bumped);
   }
 
-  // Handle prerelease bumps (alpha/beta/rc)
-  const prereleaseType = type as PrereleaseType;
-
-  if (v.prerelease) {
-    // Already in prerelease
-    if (v.prerelease.type === prereleaseType) {
-      // Same type: increment number (0.7.0-a1 -> 0.7.0-a2)
-      v.prerelease.num++;
-    } else {
-      // Different type: start new prerelease at 1 (0.7.0-a2 -> 0.7.0-b1)
-      v.prerelease = { type: prereleaseType, num: 1 };
-    }
-  } else {
-    // Starting prerelease from stable: bump minor, add prerelease
-    // (0.7.0 + alpha -> 0.8.0-a1)
-    v.minor++;
-    v.patch = 0;
-    v.prerelease = { type: prereleaseType, num: 1 };
-  }
-
-  return formatVersion(v);
+  return formatVersion(applyPrereleaseBump(parsed, type));
 }
 
 /** Update version in a package.json file */
@@ -143,25 +137,21 @@ export async function bumpPackages(
   type: BumpType,
   dryRun = false,
 ): Promise<BumpResult[]> {
-  const results: BumpResult[] = [];
+  const packagesToBump = packages.filter(pkg => toBump.has(pkg.name));
 
-  for (const pkg of packages) {
-    if (!toBump.has(pkg.name)) continue;
+  const results = packagesToBump.map(pkg => ({
+    package: pkg.name,
+    oldVersion: pkg.version,
+    newVersion: bumpVersion(pkg.version, type),
+    reason: reasons.get(pkg.name) || "changed",
+  }));
 
-    const oldVersion = pkg.version;
-    const newVersion = bumpVersion(oldVersion, type);
-    const reason = reasons.get(pkg.name) || "changed";
-
-    if (!dryRun) {
-      await updatePackageVersion(pkg.path, newVersion);
-    }
-
-    results.push({
-      package: pkg.name,
-      oldVersion,
-      newVersion,
-      reason,
-    });
+  if (!dryRun) {
+    await Promise.all(
+      packagesToBump.map((pkg, i) =>
+        updatePackageVersion(pkg.path, results[i].newVersion),
+      ),
+    );
   }
 
   return results;

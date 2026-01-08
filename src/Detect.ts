@@ -6,6 +6,12 @@ import type { Package } from "./Pnpm.ts";
 
 const exec = promisify(execCallback);
 
+/** Build git range from optional starting commit to HEAD */
+function gitRange(since: string | null): string {
+  // If no starting point, compare against first commit (initial release)
+  return since ? `${since}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
+}
+
 /** Commit information from git log */
 export interface CommitInfo {
   hash: string;
@@ -41,7 +47,7 @@ export async function findLastPackageTag(
       { cwd },
     );
     const tags = stdout.trim().split("\n").filter(Boolean);
-    return tags.length > 0 ? tags[0] : null;
+    return tags.at(0) ?? null;
   } catch {
     return null;
   }
@@ -52,11 +58,7 @@ export async function getChangedFiles(
   since: string | null,
   cwd: string = process.cwd(),
 ): Promise<string[]> {
-  // If no previous release, compare against first commit (initial release)
-  const range = since
-    ? `${since}..HEAD`
-    : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
-  const { stdout } = await exec(`git diff --name-only ${range}`, { cwd });
+  const { stdout } = await exec(`git diff --name-only ${gitRange(since)}`, { cwd });
   return stdout.trim().split("\n").filter(Boolean);
 }
 
@@ -65,11 +67,7 @@ export async function getCommitHistory(
   since: string | null,
   cwd: string = process.cwd(),
 ): Promise<CommitInfo[]> {
-  // If no previous release, get all commits (initial release)
-  const range = since
-    ? `${since}..HEAD`
-    : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
-  const { stdout } = await exec(`git log --oneline ${range}`, { cwd });
+  const { stdout } = await exec(`git log --oneline ${gitRange(since)}`, { cwd });
   return stdout
     .trim()
     .split("\n")
@@ -85,12 +83,8 @@ export async function getCommitsForPaths(
   cwd: string = process.cwd(),
 ): Promise<CommitInfo[]> {
   if (paths.length === 0) return [];
-  // If no previous release, get all commits (initial release)
-  const range = since
-    ? `${since}..HEAD`
-    : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
   const pathArgs = paths.join(" ");
-  const { stdout } = await exec(`git log --oneline ${range} -- ${pathArgs}`, {
+  const { stdout } = await exec(`git log --oneline ${gitRange(since)} -- ${pathArgs}`, {
     cwd,
   });
   return stdout
@@ -159,15 +153,12 @@ function findMatchingPackage(
   absoluteFile: string,
   packages: Array<{ name: string; realPath: string }>,
 ): string | null {
-  for (const pkg of packages) {
-    if (
+  const match = packages.find(
+    pkg =>
       absoluteFile.startsWith(pkg.realPath + path.sep) ||
-      absoluteFile === pkg.realPath
-    ) {
-      return pkg.name;
-    }
-  }
-  return null;
+      absoluteFile === pkg.realPath,
+  );
+  return match?.name ?? null;
 }
 
 /** Detect which packages have changes since last release */
@@ -176,7 +167,6 @@ export async function detectChangedPackages(
   cwd: string = process.cwd(),
 ): Promise<{ changed: Set<string>; commits: CommitInfo[] }> {
   const changed = new Set<string>();
-  const allCommits: CommitInfo[] = [];
 
   // Check each package individually against its own last release tag
   for (const pkg of packages) {
@@ -201,11 +191,13 @@ async function packageHasChanges(
   cwd: string,
 ): Promise<boolean> {
   try {
-    const range = lastTag ? `${lastTag}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
-    const pkgRelPath = path.relative(cwd, pkg.path);
+    // Resolve symlinks to ensure consistent paths (e.g., /tmp vs /private/tmp on macOS)
+    const realCwd = await realpath(cwd);
+    const realPkgPath = await realpath(pkg.path);
+    const pkgRelPath = path.relative(realCwd, realPkgPath);
     const { stdout } = await exec(
-      `git diff --name-only ${range} -- "${pkgRelPath}"`,
-      { cwd },
+      `git diff --name-only ${gitRange(lastTag)} -- "${pkgRelPath}"`,
+      { cwd: realCwd },
     );
     return stdout.trim().length > 0;
   } catch {

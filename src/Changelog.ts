@@ -10,53 +10,67 @@ export async function formatChangelog(
 ): Promise<string> {
   if (results.length === 0) return "No packages to bump.\n";
 
-  const packageMap = new Map(packages.map(p => [p.name, p]));
-  const resultMap = new Map(results.map(r => [r.package, r]));
+  const packageByName = new Map(packages.map(pkg => [pkg.name, pkg]));
+  const resultByPackage = new Map(results.map(result => [result.package, result]));
   const lastRelease = await findLastReleaseCommit(cwd);
-  let output = "";
 
-  for (const result of results) {
-    output += `## ${result.package}\n`;
+  const sections = await Promise.all(
+    results.map(result => formatPackageSection(result, packageByName, resultByPackage, lastRelease, cwd)),
+  );
 
-    if (result.reason === "changed") {
-      const pkg = packageMap.get(result.package);
-      if (pkg) {
-        const commits = await getCommitsForPaths([pkg.path], lastRelease, cwd);
-        for (const commit of commits) {
-          output += `- ${commit.hash} ${commit.message}\n`;
-        }
-      }
-    } else {
-      const depName = extractDependencyName(result.reason);
-      const depResult = resultMap.get(depName);
-      if (depResult) {
-        output += `- Dependency: ${depName} ${depResult.newVersion}\n`;
-      }
-    }
-
-    output += "\n";
-  }
-
-  return output;
+  return sections.join("\n");
 }
 
-function extractDependencyName(reason: string): string {
-  const match = reason.match(/depends on (.+?)( ->|$)/);
-  return match ? match[1] : "";
+async function formatPackageSection(
+  result: BumpResult,
+  packageByName: Map<string, Package>,
+  resultByPackage: Map<string, BumpResult>,
+  lastRelease: string | null,
+  cwd: string,
+): Promise<string> {
+  const header = `## ${result.package}\n`;
+  const body = result.reason === "changed"
+    ? await formatCommitsList(result.package, packageByName, lastRelease, cwd)
+    : formatDependencyUpdate(result.reason, resultByPackage);
+
+  return header + body + "\n";
+}
+
+async function formatCommitsList(
+  packageName: string,
+  packageByName: Map<string, Package>,
+  lastRelease: string | null,
+  cwd: string,
+): Promise<string> {
+  const pkg = packageByName.get(packageName);
+  if (!pkg) return "";
+
+  const commits = await getCommitsForPaths([pkg.path], lastRelease, cwd);
+  return commits.map(commit => `- ${commit.hash} ${commit.message}\n`).join("");
+}
+
+function formatDependencyUpdate(
+  reason: string,
+  resultByPackage: Map<string, BumpResult>,
+): string {
+  const depNameMatch = reason.match(/depends on (.+?)( ->|$)/);
+  if (!depNameMatch) return "";
+
+  const depName = depNameMatch[1];
+  const depResult = resultByPackage.get(depName);
+  if (!depResult) return "";
+
+  return `- Dependency: ${depName} ${depResult.newVersion}\n`;
 }
 
 /** Format bump results for display */
 export function formatResults(results: BumpResult[]): string {
-  if (results.length === 0) {
-    return "No packages to bump.";
-  }
+  if (results.length === 0) return "No packages to bump.";
 
-  let output = "\nPackages to bump:\n\n";
-
-  for (const result of results) {
+  const lines = results.map(result => {
     const icon = result.reason === "changed" ? "*" : "^";
-    output += `  ${icon} ${result.package}: ${result.oldVersion} -> ${result.newVersion} (${result.reason})\n`;
-  }
+    return `  ${icon} ${result.package}: ${result.oldVersion} -> ${result.newVersion} (${result.reason})`;
+  });
 
-  return output;
+  return "\nPackages to bump:\n\n" + lines.join("\n") + "\n";
 }

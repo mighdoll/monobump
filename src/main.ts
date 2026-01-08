@@ -9,6 +9,11 @@ import { createCommit, createTag, findGitRoot, push } from "./Git.ts";
 import type { Package } from "./Pnpm.ts";
 import { findWorkspacePackages } from "./Pnpm.ts";
 
+interface CascadeResult {
+  toBump: Set<string>;
+  reasons: Map<string, string>;
+}
+
 export async function main(): Promise<void> {
   const options = await parseCliArgs();
 
@@ -26,64 +31,37 @@ export async function main(): Promise<void> {
 async function runBump(options: CliOptions): Promise<void> {
   const gitRoot = await findGitRoot();
   const workspaceCwd = process.cwd();
-  logVerbose(options.verbose, "Options:", options);
-  logVerbose(options.verbose, "Git root:", gitRoot);
-  logVerbose(options.verbose, "Workspace directory:", workspaceCwd);
+  const log = createVerboseLogger(options.verbose);
 
-  logVerbose(options.verbose, "Discovering packages...");
+  log("Options:", options);
+  log("Git root:", gitRoot);
+  log("Workspace directory:", workspaceCwd);
+
+  // Discover packages
+  log("Discovering packages...");
   const packages = await findWorkspacePackages(workspaceCwd);
   const publicCount = packages.filter(p => !p.private).length;
-  logVerbose(
-    options.verbose,
-    `Found ${packages.length} packages (${publicCount} public)`,
-  );
+  log(`Found ${packages.length} packages (${publicCount} public)`);
 
-  // Always detect changed packages (needed for both modes)
-  logVerbose(options.verbose, "Detecting changes since last release...");
+  // Detect changes
+  log("Detecting changes since last release...");
   const { changed } = await detectChangedPackages(packages, gitRoot);
-  logVerbose(
-    options.verbose,
-    `Changed packages: ${Array.from(changed).join(", ")}`,
-  );
+  log(`Changed packages: ${Array.from(changed).join(", ")}`);
 
-  let toBump: Set<string>;
-  let reasons: Map<string, string>;
+  // Compute cascade based on mode
+  const cascade = options.packages.length > 0
+    ? await computeExplicitModeCascade(packages, options.packages, changed, log)
+    : await computeAutoDetectCascade(packages, changed, log);
 
-  if (options.packages.length > 0) {
-    // Explicit mode: cascade DOWN to dependencies with changes
-    const packageNames = new Set(packages.map(p => p.name));
-    const invalidPackages = options.packages.filter(p => !packageNames.has(p));
-    if (invalidPackages.length > 0) {
-      throw new Error(`Unknown package(s): ${invalidPackages.join(", ")}`);
-    }
-    const specifiedPackages = new Set(options.packages);
-    logVerbose(
-      options.verbose,
-      `Specified packages: ${Array.from(specifiedPackages).join(", ")}`,
-    );
+  if (!cascade) return;
 
-    logVerbose(options.verbose, "Finding dependencies with changes...");
-    const result = await getPackagesWithChangedDeps(packages, specifiedPackages, changed);
-    toBump = result.toBump;
-    reasons = result.reasons;
-  } else {
-    // Auto-detect mode: cascade UP to dependents
-    if (changed.size === 0) {
-      console.log("No changes detected. Nothing to bump!");
-      return;
-    }
-
-    logVerbose(options.verbose, "Computing dependency cascade...");
-    const result = await getPackagesToBump(packages, changed);
-    toBump = result.toBump;
-    reasons = result.reasons;
-  }
-
+  const { toBump, reasons } = cascade;
   if (toBump.size === 0) {
     console.log("No public packages affected. Nothing to bump!");
     return;
   }
 
+  // Perform bumps and display results
   const results = await bumpPackages(
     packages,
     toBump,
@@ -93,9 +71,44 @@ async function runBump(options: CliOptions): Promise<void> {
   );
   await displayResults(results, packages, options, gitRoot);
 
-  if (!options.dryRun && options.commit) {
+  if (!options.dryRun && options.commit && results.length > 0) {
     await performGitOps(results, options, gitRoot);
   }
+}
+
+/** Explicit mode: user specifies packages, cascade DOWN to dependencies with changes */
+async function computeExplicitModeCascade(
+  packages: Package[],
+  requestedPackages: string[],
+  changed: Set<string>,
+  log: (...args: unknown[]) => void,
+): Promise<CascadeResult> {
+  const packageNames = new Set(packages.map(p => p.name));
+  const invalidPackages = requestedPackages.filter(p => !packageNames.has(p));
+  if (invalidPackages.length > 0) {
+    throw new Error(`Unknown package(s): ${invalidPackages.join(", ")}`);
+  }
+
+  const specifiedPackages = new Set(requestedPackages);
+  log(`Specified packages: ${Array.from(specifiedPackages).join(", ")}`);
+  log("Finding dependencies with changes...");
+
+  return getPackagesWithChangedDeps(packages, specifiedPackages, changed);
+}
+
+/** Auto-detect mode: find changed packages, cascade UP to dependents */
+async function computeAutoDetectCascade(
+  packages: Package[],
+  changed: Set<string>,
+  log: (...args: unknown[]) => void,
+): Promise<CascadeResult | null> {
+  if (changed.size === 0) {
+    console.log("No changes detected. Nothing to bump!");
+    return null;
+  }
+
+  log("Computing dependency cascade...");
+  return getPackagesToBump(packages, changed);
 }
 
 async function displayResults(
@@ -103,7 +116,7 @@ async function displayResults(
   packages: Package[],
   options: CliOptions,
   cwd: string,
-) {
+): Promise<void> {
   console.log(formatResults(results));
 
   if (options.changelog) {
@@ -121,21 +134,12 @@ async function performGitOps(
   results: BumpResult[],
   options: CliOptions,
   cwd: string,
-) {
-  if (results.length === 0) return;
-
-  // Create commit with appropriate message
-  const versions = new Set(results.map(r => r.newVersion));
-  const commitMessage =
-    versions.size === 1
-      ? `chore: release v${results[0].newVersion}`
-      : `chore: release ${results.map(r => `${r.package}@${r.newVersion}`).join(", ")}`;
-
+): Promise<void> {
+  const commitMessage = formatCommitMessage(results);
   console.log("\nCreating commit...");
   await createCommit(commitMessage, cwd);
 
   if (options.tag) {
-    // Create per-package tags
     for (const result of results) {
       const tag = `${result.package}@${result.newVersion}`;
       console.log(`Creating tag ${tag}...`);
@@ -149,6 +153,14 @@ async function performGitOps(
   }
 }
 
-function logVerbose(verbose: boolean, ...args: any[]) {
-  if (verbose) console.log(...args);
+function formatCommitMessage(results: BumpResult[]): string {
+  const versions = new Set(results.map(r => r.newVersion));
+  if (versions.size === 1) {
+    return `chore: release v${results[0].newVersion}`;
+  }
+  return `chore: release ${results.map(r => `${r.package}@${r.newVersion}`).join(", ")}`;
+}
+
+function createVerboseLogger(verbose: boolean): (...args: unknown[]) => void {
+  return verbose ? (...args) => console.log(...args) : () => {};
 }

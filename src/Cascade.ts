@@ -21,29 +21,26 @@ export async function buildDependencyGraph(
   return graph;
 }
 
+const dependencySections = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+] as const;
+
 async function getWorkspaceDeps(pkgPath: string): Promise<Set<string>> {
   const packageJsonPath = path.join(pkgPath, "package.json");
   const content = await fs.readFile(packageJsonPath, "utf-8");
   const packageJson = JSON.parse(content);
-  const dependencies = new Set<string>();
 
-  const sections = ["dependencies", "devDependencies", "peerDependencies"];
-  for (const section of sections) {
-    if (packageJson[section]) {
-      for (const [depName, depVersion] of Object.entries(
-        packageJson[section],
-      )) {
-        if (
-          typeof depVersion === "string" &&
-          depVersion.startsWith("workspace:")
-        ) {
-          dependencies.add(depName);
-        }
-      }
-    }
-  }
+  const workspaceDeps = dependencySections.flatMap(section => {
+    const deps = packageJson[section];
+    if (!deps) return [];
+    return Object.entries(deps)
+      .filter(([, version]) => typeof version === "string" && version.startsWith("workspace:"))
+      .map(([name]) => name);
+  });
 
-  return dependencies;
+  return new Set(workspaceDeps);
 }
 
 /** Find all packages that depend on the given packages (recursively) */
@@ -61,7 +58,7 @@ export function findDependents(
     for (const [pkgName, pkg] of graph.entries()) {
       if (allAffected.has(pkgName)) continue;
 
-      const affectedDep = findAffectedDependency(pkg.dependencies, allAffected);
+      const affectedDep = [...pkg.dependencies].find(dep => allAffected.has(dep));
       if (affectedDep) {
         allAffected.add(pkgName);
         dependencyReasons.set(pkgName, affectedDep);
@@ -71,16 +68,6 @@ export function findDependents(
   }
 
   return { allAffected, dependencyReasons };
-}
-
-function findAffectedDependency(
-  dependencies: Set<string>,
-  affected: Set<string>,
-): string | null {
-  for (const dep of dependencies) {
-    if (affected.has(dep)) return dep;
-  }
-  return null;
 }
 
 /** Get packages to bump in explicit mode: specified packages + their dependencies that have changes */
@@ -106,20 +93,7 @@ export async function getPackagesWithChangedDeps(
     reasons.set(pkgName, "specified");
   }
 
-  // For each specified package, find dependencies that have unpublished changes
-  for (const pkgName of specifiedPublic) {
-    const pkg = graph.get(pkgName);
-    if (!pkg) continue;
-
-    for (const depName of pkg.dependencies) {
-      if (changedPackages.has(depName) && !toBump.has(depName)) {
-        toBump.add(depName);
-        reasons.set(depName, `dependency of ${pkgName}`);
-      }
-    }
-  }
-
-  // Recursively find dependencies of dependencies that have changes
+  // Recursively find all dependencies that have unpublished changes
   let hasChanges = true;
   while (hasChanges) {
     hasChanges = false;
@@ -140,7 +114,7 @@ export async function getPackagesWithChangedDeps(
   return { toBump, reasons };
 }
 
-/** Get packages to bump: only changed packages, excluding private packages (no cascade) */
+/** Get packages to bump: changed packages + their dependents, excluding private packages */
 export async function getPackagesToBump(
   packages: Package[],
   changedPackages: Set<string>,
@@ -148,17 +122,17 @@ export async function getPackagesToBump(
   const publicPackages = packages.filter(pkg => !pkg.private);
   const publicPackageNames = new Set(publicPackages.map(pkg => pkg.name));
 
-  // Only bump changed public packages - no cascade UP
-  const toBump = new Set(
+  // Filter changed to public only
+  const changedPublic = new Set(
     [...changedPackages].filter(name => publicPackageNames.has(name)),
   );
 
-  const reasons = new Map<string, string>();
-  for (const name of toBump) {
-    reasons.set(name, "changed");
-  }
+  // Build dependency graph and find all affected packages (cascade UP to dependents)
+  const graph = await buildDependencyGraph(publicPackages);
+  const { allAffected, dependencyReasons } = findDependents(graph, changedPublic);
 
-  return { toBump, reasons };
+  const reasons = buildReasonStrings(allAffected, changedPublic, dependencyReasons);
+  return { toBump: allAffected, reasons };
 }
 
 function buildReasonStrings(

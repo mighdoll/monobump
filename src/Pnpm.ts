@@ -21,36 +21,45 @@ interface PnpmPackage {
   private: boolean;
 }
 
-/** Find pnpm workspace root by looking for pnpm-workspace.yaml */
-export function findWorkspaceRoot(startDir: string): string {
-  // Search current directory and up the tree
-  let currentDir = startDir;
-  while (currentDir !== path.parse(currentDir).root) {
-    if (existsSync(path.join(currentDir, "pnpm-workspace.yaml"))) {
-      return currentDir;
-    }
-    currentDir = path.dirname(currentDir);
-  }
+const WORKSPACE_FILE = "pnpm-workspace.yaml";
 
-  // If not found going up, check one level down from startDir
-  // (handles case where workspace is in subdirectory)
+function hasWorkspaceFile(dir: string): boolean {
+  return existsSync(path.join(dir, WORKSPACE_FILE));
+}
+
+/** Search up from startDir for workspace root */
+function findWorkspaceInAncestors(startDir: string): string | undefined {
+  let dir = startDir;
+  while (dir !== path.parse(dir).root) {
+    if (hasWorkspaceFile(dir)) return dir;
+    dir = path.dirname(dir);
+  }
+  return undefined;
+}
+
+/** Check immediate subdirectories for workspace root */
+function findWorkspaceInSubdirs(startDir: string): string | undefined {
   try {
     const entries = readdirSync(startDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const subdirPath = path.join(startDir, entry.name);
-        if (existsSync(path.join(subdirPath, "pnpm-workspace.yaml"))) {
-          return subdirPath;
-        }
-      }
-    }
+    const subdir = entries.find(
+      e => e.isDirectory() && hasWorkspaceFile(path.join(startDir, e.name)),
+    );
+    return subdir ? path.join(startDir, subdir.name) : undefined;
   } catch {
-    // Ignore errors reading directory
+    return undefined;
   }
+}
 
+/** Find pnpm workspace root by looking for pnpm-workspace.yaml */
+export function findWorkspaceRoot(startDir: string): string {
+  // Search ancestors first, then immediate subdirectories
   // No workspace file found - return startDir and let pnpm validation catch issues
   // (parseWorkspaceJson will fail fast if pnpm outputs multiple arrays)
-  return startDir;
+  return (
+    findWorkspaceInAncestors(startDir) ??
+    findWorkspaceInSubdirs(startDir) ??
+    startDir
+  );
 }
 
 /** Get all workspace packages using pnpm */
@@ -73,33 +82,34 @@ export async function findWorkspacePackages(
     }));
 }
 
+/** Extract JSON arrays from pnpm output */
+function extractJsonArrays(output: string): string[] {
+  const matches = output.trim().matchAll(/\[[\s\S]*?\](?=\s*\[|$)/g);
+  return [...matches].map(m => m[0]);
+}
+
 /** Parse output from 'pnpm list --json' */
 function parseWorkspaceJson(stdout: string): PnpmPackage[] {
-  const trimmed = stdout.trim();
+  const jsonArrays = extractJsonArrays(stdout);
 
   // Should always be a single JSON array when run from workspace root
   // Multiple arrays indicates pnpm ran from wrong directory
-  const arrayMatches = [...trimmed.matchAll(/\[[\s\S]*?\](?=\s*\[|$)/g)];
-
-  if (arrayMatches.length > 1) {
+  if (jsonArrays.length === 0) {
+    throw new Error("pnpm output is empty or invalid");
+  }
+  if (jsonArrays.length > 1) {
     throw new Error(
-      `pnpm output contains ${arrayMatches.length} JSON arrays. ` +
+      `pnpm output contains ${jsonArrays.length} JSON arrays. ` +
         "This indicates pnpm was not run from the workspace root. " +
         "Ensure pnpm-workspace.yaml exists in your repository.",
     );
   }
 
-  if (arrayMatches.length === 0) {
-    throw new Error("pnpm output is empty or invalid");
-  }
-
+  const jsonContent = jsonArrays[0];
   try {
-    return JSON.parse(arrayMatches[0][0]);
+    return JSON.parse(jsonContent);
   } catch (error) {
-    console.error(
-      "Failed to parse pnpm output:",
-      arrayMatches[0][0].slice(0, 200),
-    );
+    console.error("Failed to parse pnpm output:", jsonContent.slice(0, 200));
     throw error;
   }
 }

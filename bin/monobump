@@ -7,16 +7,75 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
 
 //#region src/Bump.ts
+/** Prerelease type with prefix mapping */
+const prereleasePrefix = {
+	alpha: "a",
+	beta: "b",
+	rc: "rc"
+};
+/** Parse a version string into components */
+function parseVersion(version) {
+	const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(a|b|rc)(\d+))?$/);
+	if (!match) throw new Error(`Invalid version: ${version}`);
+	const [, major, minor, patch, preType, preNum] = match;
+	const result = {
+		major: Number(major),
+		minor: Number(minor),
+		patch: Number(patch)
+	};
+	if (preType) result.prerelease = {
+		type: {
+			a: "alpha",
+			b: "beta",
+			rc: "rc"
+		}[preType],
+		num: Number(preNum)
+	};
+	return result;
+}
+/** Format a parsed version back to string */
+function formatVersion(v) {
+	const base = `${v.major}.${v.minor}.${v.patch}`;
+	if (v.prerelease) return `${base}-${prereleasePrefix[v.prerelease.type]}${v.prerelease.num}`;
+	return base;
+}
 /** Bump a semver version */
 function bumpVersion(version, type) {
-	const parts = version.split(".").map(Number);
-	if (parts.length !== 3 || parts.some(Number.isNaN)) throw new Error(`Invalid version: ${version}`);
-	const [major, minor, patch] = parts;
-	switch (type) {
-		case "major": return `${major + 1}.0.0`;
-		case "minor": return `${major}.${minor + 1}.0`;
-		case "patch": return `${major}.${minor}.${patch + 1}`;
+	const v = parseVersion(version);
+	if (type === "major" || type === "minor" || type === "patch") {
+		if (v.prerelease) {
+			delete v.prerelease;
+			if (type === "minor") {
+				v.minor++;
+				v.patch = 0;
+			} else if (type === "major") {
+				v.major++;
+				v.minor = 0;
+				v.patch = 0;
+			}
+			return formatVersion(v);
+		}
+		switch (type) {
+			case "major": return `${v.major + 1}.0.0`;
+			case "minor": return `${v.major}.${v.minor + 1}.0`;
+			case "patch": return `${v.major}.${v.minor}.${v.patch + 1}`;
+		}
 	}
+	const prereleaseType = type;
+	if (v.prerelease) if (v.prerelease.type === prereleaseType) v.prerelease.num++;
+	else v.prerelease = {
+		type: prereleaseType,
+		num: 1
+	};
+	else {
+		v.minor++;
+		v.patch = 0;
+		v.prerelease = {
+			type: prereleaseType,
+			num: 1
+		};
+	}
+	return formatVersion(v);
 }
 /** Update version in a package.json file */
 async function updatePackageVersion(packagePath, newVersion) {
@@ -317,9 +376,12 @@ async function parseCliArgs() {
 	if (![
 		"major",
 		"minor",
-		"patch"
+		"patch",
+		"alpha",
+		"beta",
+		"rc"
 	].includes(type)) {
-		console.error(`Invalid bump type: ${type}. Must be major, minor, or patch.`);
+		console.error(`Invalid bump type: ${type}. Must be major, minor, patch, alpha, beta, or rc.`);
 		process.exit(1);
 	}
 	return {
@@ -339,7 +401,7 @@ monobump - Smart version bumping for pnpm monorepos
 Usage: monobump [options]
 
 Options:
-  -t, --type <type>      Bump type: major, minor, or patch (default: patch)
+  -t, --type <type>      Bump type: major, minor, patch, alpha, beta, rc (default: patch)
   --dry-run              Show what would be bumped without making changes
   --changelog            Output changelog markdown grouped by package
   --commit, --no-commit  Create a git commit (default: true)
@@ -349,9 +411,16 @@ Options:
   -V, --version          Show version number
   -h, --help             Show this help message
 
+Prerelease behavior:
+  alpha/beta/rc from stable    Bumps minor, starts prerelease (0.7.0 -> 0.8.0-a1)
+  alpha/beta/rc from same      Increments number (0.7.0-a1 -> 0.7.0-a2)
+  alpha/beta/rc from different Starts new prerelease (0.7.0-a2 -> 0.7.0-b1)
+  patch/minor/major from pre   Graduates to stable (0.7.0-a1 -> 0.7.0)
+
 Examples:
   monobump                          # Bump patch version
   monobump --type minor --dry-run   # Preview minor version bump
+  monobump --type alpha             # Start or increment alpha prerelease
   monobump --changelog              # Bump and output changelog
   monobump --push                   # Bump, commit, tag, and push
 `);

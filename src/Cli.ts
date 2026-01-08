@@ -47,9 +47,9 @@ export async function parseCliArgs(): Promise<CliOptions> {
   }
 
   const type = values.type as string;
-  if (!["major", "minor", "patch"].includes(type)) {
+  if (!["major", "minor", "patch", "alpha", "beta", "rc"].includes(type)) {
     console.error(
-      `Invalid bump type: ${type}. Must be major, minor, or patch.`,
+      `Invalid bump type: ${type}. Must be major, minor, patch, alpha, beta, or rc.`,
     );
     process.exit(1);
   }
@@ -72,7 +72,7 @@ monobump - Smart version bumping for pnpm monorepos
 Usage: monobump [options]
 
 Options:
-  -t, --type <type>      Bump type: major, minor, or patch (default: patch)
+  -t, --type <type>      Bump type: major, minor, patch, alpha, beta, rc (default: patch)
   --dry-run              Show what would be bumped without making changes
   --changelog            Output changelog markdown grouped by package
   --commit, --no-commit  Create a git commit (default: true)
@@ -82,9 +82,16 @@ Options:
   -V, --version          Show version number
   -h, --help             Show this help message
 
+Prerelease behavior:
+  alpha/beta/rc from stable    Bumps minor, starts prerelease (0.7.0 -> 0.8.0-a1)
+  alpha/beta/rc from same      Increments number (0.7.0-a1 -> 0.7.0-a2)
+  alpha/beta/rc from different Starts new prerelease (0.7.0-a2 -> 0.7.0-b1)
+  patch/minor/major from pre   Graduates to stable (0.7.0-a1 -> 0.7.0)
+
 Examples:
   monobump                          # Bump patch version
   monobump --type minor --dry-run   # Preview minor version bump
+  monobump --type alpha             # Start or increment alpha prerelease
   monobump --changelog              # Bump and output changelog
   monobump --push                   # Bump, commit, tag, and push
 `);

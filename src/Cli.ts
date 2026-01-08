@@ -77,18 +77,6 @@ async function printVersion(): Promise<void> {
   console.log(pkg.version);
 }
 
-/** Resolve bump type from CLI flags, defaulting to patch */
-function resolveBumpType(values: Record<string, unknown>): BumpType {
-  const enabledTypes = BUMP_TYPES.filter(t => values[t]);
-
-  if (enabledTypes.length > 1) {
-    console.error(`Only one bump type allowed. Got: ${enabledTypes.join(", ")}`);
-    process.exit(1);
-  }
-
-  return enabledTypes[0] ?? "patch";
-}
-
 function printHelp(): void {
   console.log(`
 monobump - Smart version bumping for pnpm monorepos
@@ -131,4 +119,16 @@ Examples:
   monobump --changelog         # Bump and output changelog
   monobump --push              # Bump, commit, tag, and push
 `);
+}
+
+/** Resolve bump type from CLI flags, defaulting to patch */
+function resolveBumpType(values: Record<string, unknown>): BumpType {
+  const enabledTypes = BUMP_TYPES.filter(t => values[t]);
+
+  if (enabledTypes.length > 1) {
+    console.error(`Only one bump type allowed. Got: ${enabledTypes.join(", ")}`);
+    process.exit(1);
+  }
+
+  return enabledTypes[0] ?? "patch";
 }

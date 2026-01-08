@@ -21,6 +21,18 @@ export async function formatChangelog(
   return sections.join("\n");
 }
 
+/** Format bump results for display */
+export function formatResults(results: BumpResult[]): string {
+  if (results.length === 0) return "No packages to bump.";
+
+  const lines = results.map(result => {
+    const icon = result.reason === "changed" ? "*" : "^";
+    return `  ${icon} ${result.package}: ${result.oldVersion} -> ${result.newVersion} (${result.reason})`;
+  });
+
+  return "\nPackages to bump:\n\n" + lines.join("\n") + "\n";
+}
+
 async function formatPackageSection(
   result: BumpResult,
   packageByName: Map<string, Package>,
@@ -61,16 +73,4 @@ function formatDependencyUpdate(
   if (!depResult) return "";
 
   return `- Dependency: ${depName} ${depResult.newVersion}\n`;
-}
-
-/** Format bump results for display */
-export function formatResults(results: BumpResult[]): string {
-  if (results.length === 0) return "No packages to bump.";
-
-  const lines = results.map(result => {
-    const icon = result.reason === "changed" ? "*" : "^";
-    return `  ${icon} ${result.package}: ${result.oldVersion} -> ${result.newVersion} (${result.reason})`;
-  });
-
-  return "\nPackages to bump:\n\n" + lines.join("\n") + "\n";
 }

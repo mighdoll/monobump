@@ -3,15 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { exec } from "./Exec.ts";
 
-/** Read and parse a package.json file */
-export async function readPackageJson(
-  pkgPath: string,
-): Promise<Record<string, unknown>> {
-  const packageJsonPath = path.join(pkgPath, "package.json");
-  const content = await fs.readFile(packageJsonPath, "utf-8");
-  return JSON.parse(content);
-}
-
 /** Represents a package in the pnpm workspace */
 export interface Package {
   name: string;
@@ -30,31 +21,13 @@ interface PnpmPackage {
 
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
 
-function hasWorkspaceFile(dir: string): boolean {
-  return existsSync(path.join(dir, WORKSPACE_FILE));
-}
-
-/** Search up from startDir for workspace root */
-function findWorkspaceInAncestors(startDir: string): string | undefined {
-  let dir = startDir;
-  while (dir !== path.parse(dir).root) {
-    if (hasWorkspaceFile(dir)) return dir;
-    dir = path.dirname(dir);
-  }
-  return undefined;
-}
-
-/** Check immediate subdirectories for workspace root */
-function findWorkspaceInSubdirs(startDir: string): string | undefined {
-  try {
-    const entries = readdirSync(startDir, { withFileTypes: true });
-    const subdir = entries.find(
-      e => e.isDirectory() && hasWorkspaceFile(path.join(startDir, e.name)),
-    );
-    return subdir ? path.join(startDir, subdir.name) : undefined;
-  } catch {
-    return undefined;
-  }
+/** Read and parse a package.json file */
+export async function readPackageJson(
+  pkgPath: string,
+): Promise<Record<string, unknown>> {
+  const packageJsonPath = path.join(pkgPath, "package.json");
+  const content = await fs.readFile(packageJsonPath, "utf-8");
+  return JSON.parse(content);
 }
 
 /** Find pnpm workspace root by looking for pnpm-workspace.yaml */
@@ -89,10 +62,27 @@ export async function findWorkspacePackages(
     }));
 }
 
-/** Extract JSON arrays from pnpm output */
-function extractJsonArrays(output: string): string[] {
-  const matches = output.trim().matchAll(/\[[\s\S]*?\](?=\s*\[|$)/g);
-  return [...matches].map(m => m[0]);
+/** Search up from startDir for workspace root */
+function findWorkspaceInAncestors(startDir: string): string | undefined {
+  let dir = startDir;
+  while (dir !== path.parse(dir).root) {
+    if (hasWorkspaceFile(dir)) return dir;
+    dir = path.dirname(dir);
+  }
+  return undefined;
+}
+
+/** Check immediate subdirectories for workspace root */
+function findWorkspaceInSubdirs(startDir: string): string | undefined {
+  try {
+    const entries = readdirSync(startDir, { withFileTypes: true });
+    const subdir = entries.find(
+      e => e.isDirectory() && hasWorkspaceFile(path.join(startDir, e.name)),
+    );
+    return subdir ? path.join(startDir, subdir.name) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Parse output from 'pnpm list --json' */
@@ -119,4 +109,14 @@ function parseWorkspaceJson(stdout: string): PnpmPackage[] {
     console.error("Failed to parse pnpm output:", jsonContent.slice(0, 200));
     throw error;
   }
+}
+
+function hasWorkspaceFile(dir: string): boolean {
+  return existsSync(path.join(dir, WORKSPACE_FILE));
+}
+
+/** Extract JSON arrays from pnpm output */
+function extractJsonArrays(output: string): string[] {
+  const matches = output.trim().matchAll(/\[[\s\S]*?\](?=\s*\[|$)/g);
+  return [...matches].map(m => m[0]);
 }

@@ -76,6 +76,10 @@ async function runBump(options: CliOptions): Promise<void> {
   }
 }
 
+function createVerboseLogger(verbose: boolean): (...args: unknown[]) => void {
+  return verbose ? (...args) => console.log(...args) : () => {};
+}
+
 /** Explicit mode: user specifies packages, cascade DOWN to dependencies with changes */
 async function computeExplicitModeCascade(
   packages: Package[],
@@ -159,8 +163,4 @@ function formatCommitMessage(results: BumpResult[]): string {
     return `chore: release v${results[0].newVersion}`;
   }
   return `chore: release ${results.map(r => `${r.package}@${r.newVersion}`).join(", ")}`;
-}
-
-function createVerboseLogger(verbose: boolean): (...args: unknown[]) => void {
-  return verbose ? (...args) => console.log(...args) : () => {};
 }

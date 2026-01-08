@@ -5,12 +5,13 @@ import { readPackageJson, type Package } from "./Pnpm.ts";
 /** Semantic version bump type */
 export type BumpType = "major" | "minor" | "patch" | "alpha" | "beta" | "rc";
 
-/** Prerelease type with prefix mapping */
-const prereleasePrefix = {
-  alpha: "a",
-  beta: "b",
-  rc: "rc",
-} as const;
+/** Result of bumping a package version */
+export interface BumpResult {
+  package: string;
+  oldVersion: string;
+  newVersion: string;
+  reason: string;
+}
 
 type PrereleaseType = keyof typeof prereleasePrefix;
 
@@ -21,6 +22,13 @@ interface ParsedVersion {
   patch: number;
   prerelease?: { type: PrereleaseType; num: number };
 }
+
+/** Prerelease type with prefix mapping */
+const prereleasePrefix = {
+  alpha: "a",
+  beta: "b",
+  rc: "rc",
+} as const;
 
 /** Mapping from short prerelease prefix to full type name */
 const prefixToType: Record<string, PrereleaseType> = {
@@ -44,57 +52,6 @@ export function parseVersion(version: string): ParsedVersion {
       prerelease: { type: prefixToType[preType], num: Number(preNum) },
     }),
   };
-}
-
-/** Format a parsed version back to string */
-function formatVersion(ver: ParsedVersion): string {
-  const base = `${ver.major}.${ver.minor}.${ver.patch}`;
-  if (!ver.prerelease) return base;
-  return `${base}-${prereleasePrefix[ver.prerelease.type]}${ver.prerelease.num}`;
-}
-
-/** Result of bumping a package version */
-export interface BumpResult {
-  package: string;
-  oldVersion: string;
-  newVersion: string;
-  reason: string;
-}
-
-/** Check if bump type is a stable version bump */
-function isStableBump(type: BumpType): type is "major" | "minor" | "patch" {
-  return type === "major" || type === "minor" || type === "patch";
-}
-
-/** Graduate prerelease to stable, applying the bump type */
-function graduateToStable(ver: ParsedVersion, type: "major" | "minor" | "patch"): ParsedVersion {
-  // For patch, just remove prerelease (0.7.0-a1 -> 0.7.0)
-  if (type === "patch") return { ...ver, prerelease: undefined };
-  // For minor: bump minor, reset patch (0.7.0-a1 -> 0.8.0)
-  if (type === "minor") return { ...ver, minor: ver.minor + 1, patch: 0, prerelease: undefined };
-  // For major: bump major, reset minor and patch (0.7.0-a1 -> 1.0.0)
-  return { major: ver.major + 1, minor: 0, patch: 0 };
-}
-
-/** Apply stable bump to a stable version */
-function applyStableBump(ver: ParsedVersion, type: "major" | "minor" | "patch"): ParsedVersion {
-  if (type === "major") return { major: ver.major + 1, minor: 0, patch: 0 };
-  if (type === "minor") return { ...ver, minor: ver.minor + 1, patch: 0 };
-  return { ...ver, patch: ver.patch + 1 };
-}
-
-/** Apply prerelease bump */
-function applyPrereleaseBump(ver: ParsedVersion, type: PrereleaseType): ParsedVersion {
-  // Already in prerelease of same type: increment (0.7.0-a1 -> 0.7.0-a2)
-  if (ver.prerelease?.type === type) {
-    return { ...ver, prerelease: { type, num: ver.prerelease.num + 1 } };
-  }
-  // Different prerelease type: start at 1 (0.7.0-a2 -> 0.7.0-b1)
-  if (ver.prerelease) {
-    return { ...ver, prerelease: { type, num: 1 } };
-  }
-  // Starting prerelease from stable: bump minor (0.7.0 + alpha -> 0.8.0-a1)
-  return { ...ver, minor: ver.minor + 1, patch: 0, prerelease: { type, num: 1 } };
 }
 
 /** Bump a semver version */
@@ -154,4 +111,47 @@ export async function bumpPackages(
   }
 
   return results;
+}
+
+/** Check if bump type is a stable version bump */
+function isStableBump(type: BumpType): type is "major" | "minor" | "patch" {
+  return type === "major" || type === "minor" || type === "patch";
+}
+
+/** Graduate prerelease to stable, applying the bump type */
+function graduateToStable(ver: ParsedVersion, type: "major" | "minor" | "patch"): ParsedVersion {
+  // For patch, just remove prerelease (0.7.0-a1 -> 0.7.0)
+  if (type === "patch") return { ...ver, prerelease: undefined };
+  // For minor: bump minor, reset patch (0.7.0-a1 -> 0.8.0)
+  if (type === "minor") return { ...ver, minor: ver.minor + 1, patch: 0, prerelease: undefined };
+  // For major: bump major, reset minor and patch (0.7.0-a1 -> 1.0.0)
+  return { major: ver.major + 1, minor: 0, patch: 0 };
+}
+
+/** Apply stable bump to a stable version */
+function applyStableBump(ver: ParsedVersion, type: "major" | "minor" | "patch"): ParsedVersion {
+  if (type === "major") return { major: ver.major + 1, minor: 0, patch: 0 };
+  if (type === "minor") return { ...ver, minor: ver.minor + 1, patch: 0 };
+  return { ...ver, patch: ver.patch + 1 };
+}
+
+/** Format a parsed version back to string */
+function formatVersion(ver: ParsedVersion): string {
+  const base = `${ver.major}.${ver.minor}.${ver.patch}`;
+  if (!ver.prerelease) return base;
+  return `${base}-${prereleasePrefix[ver.prerelease.type]}${ver.prerelease.num}`;
+}
+
+/** Apply prerelease bump */
+function applyPrereleaseBump(ver: ParsedVersion, type: PrereleaseType): ParsedVersion {
+  // Already in prerelease of same type: increment (0.7.0-a1 -> 0.7.0-a2)
+  if (ver.prerelease?.type === type) {
+    return { ...ver, prerelease: { type, num: ver.prerelease.num + 1 } };
+  }
+  // Different prerelease type: start at 1 (0.7.0-a2 -> 0.7.0-b1)
+  if (ver.prerelease) {
+    return { ...ver, prerelease: { type, num: 1 } };
+  }
+  // Starting prerelease from stable: bump minor (0.7.0 + alpha -> 0.8.0-a1)
+  return { ...ver, minor: ver.minor + 1, patch: 0, prerelease: { type, num: 1 } };
 }

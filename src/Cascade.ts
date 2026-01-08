@@ -1,21 +1,15 @@
 import { readPackageJson, type Package } from "./Pnpm.ts";
 
-/** Filter to public packages and return their names as a Set */
-function getPublicPackages(packages: Package[]): {
-  packages: Package[];
-  names: Set<string>;
-} {
-  const publicPackages = packages.filter(pkg => !pkg.private);
-  return {
-    packages: publicPackages,
-    names: new Set(publicPackages.map(pkg => pkg.name)),
-  };
-}
-
 /** Package with resolved workspace dependencies */
 export interface PackageWithDeps extends Package {
   dependencies: Set<string>;
 }
+
+const dependencySections = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+] as const;
 
 /** Build dependency graph by reading package.json files */
 export async function buildDependencyGraph(
@@ -29,26 +23,6 @@ export async function buildDependencyGraph(
   }
 
   return graph;
-}
-
-const dependencySections = [
-  "dependencies",
-  "devDependencies",
-  "peerDependencies",
-] as const;
-
-async function getWorkspaceDeps(pkgPath: string): Promise<Set<string>> {
-  const packageJson = await readPackageJson(pkgPath);
-
-  const workspaceDeps = dependencySections.flatMap(section => {
-    const deps = packageJson[section];
-    if (!deps) return [];
-    return Object.entries(deps)
-      .filter(([, version]) => typeof version === "string" && version.startsWith("workspace:"))
-      .map(([name]) => name);
-  });
-
-  return new Set(workspaceDeps);
 }
 
 /** Find all packages that depend on the given packages (recursively) */
@@ -141,6 +115,32 @@ export async function getPackagesToBump(
 
   const reasons = buildReasonStrings(allAffected, changedPublic, dependencyReasons);
   return { toBump: allAffected, reasons };
+}
+
+async function getWorkspaceDeps(pkgPath: string): Promise<Set<string>> {
+  const packageJson = await readPackageJson(pkgPath);
+
+  const workspaceDeps = dependencySections.flatMap(section => {
+    const deps = packageJson[section];
+    if (!deps) return [];
+    return Object.entries(deps)
+      .filter(([, version]) => typeof version === "string" && version.startsWith("workspace:"))
+      .map(([name]) => name);
+  });
+
+  return new Set(workspaceDeps);
+}
+
+/** Filter to public packages and return their names as a Set */
+function getPublicPackages(packages: Package[]): {
+  packages: Package[];
+  names: Set<string>;
+} {
+  const publicPackages = packages.filter(pkg => !pkg.private);
+  return {
+    packages: publicPackages,
+    names: new Set(publicPackages.map(pkg => pkg.name)),
+  };
 }
 
 function buildReasonStrings(

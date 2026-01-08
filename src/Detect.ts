@@ -3,12 +3,6 @@ import path from "node:path";
 import { exec } from "./Exec.ts";
 import type { Package } from "./Pnpm.ts";
 
-/** Build git range from optional starting commit to HEAD */
-function gitRange(since: string | null): string {
-  // If no starting point, compare against first commit (initial release)
-  return since ? `${since}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
-}
-
 /** Commit information from git log */
 export interface CommitInfo {
   hash: string;
@@ -92,11 +86,6 @@ export async function getCommitsForPaths(
     .filter((commit): commit is CommitInfo => commit !== null);
 }
 
-function parseCommitLine(line: string): CommitInfo | null {
-  const match = line.match(/^([a-f0-9]+)\s+(.+)$/);
-  return match ? { hash: match[1], message: match[2] } : null;
-}
-
 /** Map changed files to packages */
 export async function mapFilesToPackages(
   changedFiles: string[],
@@ -116,6 +105,40 @@ export async function mapFilesToPackages(
   }
 
   return changedPackages;
+}
+
+/** Detect which packages have changes since last release */
+export async function detectChangedPackages(
+  packages: Package[],
+  cwd: string = process.cwd(),
+): Promise<{ changed: Set<string>; commits: CommitInfo[] }> {
+  const changed = new Set<string>();
+
+  // Check each package individually against its own last release tag
+  for (const pkg of packages) {
+    const lastTag = await findLastPackageTag(pkg.name, cwd);
+    const hasChanges = await packageHasChanges(pkg, lastTag, cwd);
+    if (hasChanges) {
+      changed.add(pkg.name);
+    }
+  }
+
+  // Get overall commit history for changelog (use global last release)
+  const lastRelease = await findLastReleaseCommit(cwd);
+  const commits = await getCommitHistory(lastRelease, cwd);
+
+  return { changed, commits };
+}
+
+/** Build git range from optional starting commit to HEAD */
+function gitRange(since: string | null): string {
+  // If no starting point, compare against first commit (initial release)
+  return since ? `${since}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
+}
+
+function parseCommitLine(line: string): CommitInfo | null {
+  const match = line.match(/^([a-f0-9]+)\s+(.+)$/);
+  return match ? { hash: match[1], message: match[2] } : null;
 }
 
 async function normalizePackagePaths(packages: Package[]) {
@@ -156,29 +179,6 @@ function findMatchingPackage(
       absoluteFile === pkg.realPath,
   );
   return match?.name ?? null;
-}
-
-/** Detect which packages have changes since last release */
-export async function detectChangedPackages(
-  packages: Package[],
-  cwd: string = process.cwd(),
-): Promise<{ changed: Set<string>; commits: CommitInfo[] }> {
-  const changed = new Set<string>();
-
-  // Check each package individually against its own last release tag
-  for (const pkg of packages) {
-    const lastTag = await findLastPackageTag(pkg.name, cwd);
-    const hasChanges = await packageHasChanges(pkg, lastTag, cwd);
-    if (hasChanges) {
-      changed.add(pkg.name);
-    }
-  }
-
-  // Get overall commit history for changelog (use global last release)
-  const lastRelease = await findLastReleaseCommit(cwd);
-  const commits = await getCommitHistory(lastRelease, cwd);
-
-  return { changed, commits };
 }
 
 /** Check if a package has changes since its last tag */

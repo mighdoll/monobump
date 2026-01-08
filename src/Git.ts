@@ -1,11 +1,5 @@
 import { exec } from "./Exec.ts";
 
-/** Execute a git command in the specified directory */
-async function git(command: string, cwd: string): Promise<string> {
-  const { stdout } = await exec(`git ${command}`, { cwd });
-  return stdout.trim();
-}
-
 /** Find the git root directory */
 export async function findGitRoot(cwd: string = process.cwd()): Promise<string> {
   return git("rev-parse --show-toplevel", cwd);
@@ -35,4 +29,10 @@ export async function push(
 ): Promise<void> {
   const tagsFlag = includeTags ? "--follow-tags" : "";
   await git(`push ${tagsFlag}`.trim(), cwd);
+}
+
+/** Execute a git command in the specified directory */
+async function git(command: string, cwd: string): Promise<string> {
+  const { stdout } = await exec(`git ${command}`, { cwd });
+  return stdout.trim();
 }

@@ -6,6 +6,7 @@ import { findWorkspacePackages } from "../src/Pnpm.ts";
 import {
   createReleaseCommit,
   createTestMonorepo,
+  createTestSinglePackageRepo,
   readPackageJson,
   writeFileAndCommit,
 } from "./TestHelpers.js";
@@ -188,5 +189,27 @@ describe("monobump cascade logic", () => {
     expect(reasons.get("pkg-a")).toBe("changed");
     expect(reasons.get("pkg-b")).toBe("depends on pkg-a");
     expect(reasons.get("pkg-c")).toBe("depends on pkg-b -> pkg-a");
+  });
+
+  it("should detect changes in single-package repo at root", async () => {
+    const repo = await createTestSinglePackageRepo({
+      name: "my-package",
+      version: "1.0.0",
+    });
+    cleanups.push(repo.cleanup);
+
+    // Create initial release tag
+    await createReleaseCommit(repo.root, "1.0.0");
+
+    // Change the package
+    await writeFileAndCommit(repo.root, "index.ts", "export const x = 1;", "Add index");
+
+    // Detect changes - package is at repo root (path.relative returns "")
+    const packages = await findWorkspacePackages(repo.root);
+    expect(packages.length).toBe(1);
+    expect(packages[0].name).toBe("my-package");
+
+    const { changed } = await detectChangedPackages(packages, repo.root);
+    expect(changed.has("my-package")).toBe(true);
   });
 });

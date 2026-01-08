@@ -20,80 +20,88 @@ export interface TestMonorepo {
   cleanup: () => Promise<void>;
 }
 
-/** Creates a temporary monorepo for testing */
-export async function createTestMonorepo(
-  packages: TestPackage[],
-): Promise<TestMonorepo> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "monobump-test-"));
+interface CreateTestRepoOptions {
+  packages: TestPackage[];
+  /** If true, place single package at root instead of packages/ */
+  atRoot?: boolean;
+}
 
-  // Create pnpm-workspace.yaml
-  await fs.writeFile(
-    path.join(root, "pnpm-workspace.yaml"),
-    'packages:\n  - "packages/*"\n',
-  );
-
-  // Create root package.json
-  await fs.writeFile(
-    path.join(root, "package.json"),
-    JSON.stringify(
-      {
-        name: "test-root",
-        private: true,
-        version: "1.0.0",
-      },
-      null,
-      2,
-    ),
-  );
-
-  // Create packages
-  const packagesDir = path.join(root, "packages");
-  await fs.mkdir(packagesDir, { recursive: true });
-
-  for (const pkg of packages) {
-    const pkgDir = path.join(packagesDir, pkg.name);
-    await fs.mkdir(pkgDir, { recursive: true });
-
-    const packageJson = {
-      name: pkg.name,
-      version: pkg.version || "1.0.0",
-      ...(pkg.private && { private: true }),
-      ...(pkg.dependencies && { dependencies: pkg.dependencies }),
-    };
-
-    await fs.writeFile(
-      path.join(pkgDir, "package.json"),
-      JSON.stringify(packageJson, null, 2) + "\n",
-    );
-
-    // Write additional files if provided
-    if (pkg.files) {
-      for (const [filename, content] of Object.entries(pkg.files)) {
-        await fs.writeFile(path.join(pkgDir, filename), content);
-      }
-    }
-  }
-
-  // Initialize pnpm workspace
-  // This is crucial - pnpm needs to recognize the workspace
-  await exec("pnpm install --ignore-workspace", { cwd: root }).catch(() => {
-    // Ignore errors - workspace might not be fully set up yet
-  });
-
-  // Initialize git repo
+/** Initialize a git repo with standard test config */
+async function initGitRepo(root: string): Promise<void> {
   await exec("git init", { cwd: root });
   await exec('git config user.email "test@example.com"', { cwd: root });
   await exec('git config user.name "Test User"', { cwd: root });
   await exec("git add .", { cwd: root });
   await exec('git commit -m "Initial commit"', { cwd: root });
+}
+
+/** Write a package.json file */
+async function writePackageJson(dir: string, pkg: TestPackage): Promise<void> {
+  await fs.writeFile(
+    path.join(dir, "package.json"),
+    JSON.stringify(
+      {
+        name: pkg.name,
+        version: pkg.version || "1.0.0",
+        ...(pkg.private && { private: true }),
+        ...(pkg.dependencies && { dependencies: pkg.dependencies }),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+
+  if (pkg.files) {
+    for (const [filename, content] of Object.entries(pkg.files)) {
+      await fs.writeFile(path.join(dir, filename), content);
+    }
+  }
+}
+
+/** Creates a test repo - monorepo or single-package */
+async function createTestRepo(options: CreateTestRepoOptions): Promise<TestMonorepo> {
+  const { packages, atRoot = false } = options;
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "monobump-test-"));
+
+  if (atRoot) {
+    await fs.writeFile(path.join(root, "pnpm-workspace.yaml"), "packages:\n  - .\n");
+    await writePackageJson(root, packages[0]);
+  } else {
+    await fs.writeFile(path.join(root, "pnpm-workspace.yaml"), 'packages:\n  - "packages/*"\n');
+    await fs.writeFile(
+      path.join(root, "package.json"),
+      JSON.stringify({ name: "test-root", private: true, version: "1.0.0" }, null, 2),
+    );
+
+    const packagesDir = path.join(root, "packages");
+    await fs.mkdir(packagesDir, { recursive: true });
+
+    for (const pkg of packages) {
+      const pkgDir = path.join(packagesDir, pkg.name);
+      await fs.mkdir(pkgDir, { recursive: true });
+      await writePackageJson(pkgDir, pkg);
+    }
+
+    await exec("pnpm install --ignore-workspace", { cwd: root }).catch(() => {});
+  }
+
+  await initGitRepo(root);
 
   return {
     root,
     packages,
-    cleanup: async () => {
-      await fs.rm(root, { recursive: true, force: true });
-    },
+    cleanup: () => fs.rm(root, { recursive: true, force: true }),
   };
+}
+
+/** Creates a temporary monorepo for testing */
+export function createTestMonorepo(packages: TestPackage[]): Promise<TestMonorepo> {
+  return createTestRepo({ packages });
+}
+
+/** Creates a single-package repo (package at root) */
+export function createTestSinglePackageRepo(pkg: TestPackage): Promise<TestMonorepo> {
+  return createTestRepo({ packages: [pkg], atRoot: true });
 }
 
 /** Write content to a file in the test monorepo and commit it */

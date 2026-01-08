@@ -30,11 +30,11 @@ monobump
 
 # Bump specific packages only
 monobump @myorg/pkg-a
-monobump @myorg/pkg-a @myorg/pkg-b --type minor
+monobump @myorg/pkg-a @myorg/pkg-b --minor
 
 # Bump minor or major version
-monobump --type minor
-monobump --type major
+monobump --minor
+monobump --major
 
 # Preview changes without modifying anything
 monobump --dry-run
@@ -88,13 +88,18 @@ Usage: monobump [options] [packages...]
 | Argument/Option | Description | Default |
 |-----------------|-------------|---------|
 | `[packages...]` | Package names to bump (if omitted, auto-detects) | - |
-| `-t, --type <type>` | Bump type: major, minor, patch, alpha, beta, rc | `patch` |
-| `--dry-run` | Show what would change without writing | `false` |
-| `--changelog` | Output changelog markdown | `false` |
-| `--no-commit` | Don't create git commit | `false` |
-| `--tag` | Create git tag | `true` |
-| `--push` | Push commit and tags to remote | `false` |
-| `-v, --verbose` | Show verbose output | `false` |
+| `--patch` | Bump patch version | ✓ |
+| `--minor` | Bump minor version | - |
+| `--major` | Bump major version | - |
+| `--alpha` | Start or increment alpha prerelease | - |
+| `--beta` | Start or increment beta prerelease | - |
+| `--rc` | Start or increment release candidate | - |
+| `--dry-run` | Show what would change without writing | - |
+| `--changelog` | Output changelog markdown | - |
+| `--no-commit` | Don't create git commit | - |
+| `--no-tag` | Don't create git tags | - |
+| `--push` | Push commit and tags to remote | - |
+| `-v, --verbose` | Show verbose output | - |
 | `-h, --help` | Show help message | - |
 
 ## Example Workflows
@@ -123,7 +128,7 @@ monobump my-cli-tool --dry-run
 monobump my-cli-tool
 
 # Release an alpha version of one package
-monobump my-new-feature --type alpha
+monobump my-new-feature --alpha
 ```
 
 ## License

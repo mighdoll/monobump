@@ -2,13 +2,13 @@
 
 Smart version bumping for pnpm monorepos.
 
-**monobump** only bumps packages that have changed since the last release, plus any packages that depend on them. You can also specify packages explicitly for more selective releases. Private packages are never bumped.
+**monobump** only bumps packages that have changed since the last release. You can also specify packages explicitly for selective releases. Private packages are never bumped.
 
 ## Features
 
-- **Smart detection** - Only bumps packages with actual changes
+- **Smart detection** - Only bumps packages with actual changes (per-package tag tracking)
 - **Selective bumping** - Specify packages explicitly for targeted releases
-- **Dependency cascading** - Automatically handles dependencies in both modes
+- **Safe dependencies** - In explicit mode, ensures dependencies are released first
 - **Respects privacy** - Never bumps private packages
 - **Changelog output** - Generate changelog markdown grouped by package
 - **Git integration** - Commits, tags, and optionally pushes changes
@@ -53,24 +53,21 @@ monobump --no-commit
 
 1. **Finds workspace root** by searching for `pnpm-workspace.yaml`
 2. **Discovers packages** using `pnpm list --json --recursive --only-projects` from workspace root
-3. **Detects changes** by comparing files since the last "chore: release" commit
-4. **Builds dependency graph** by reading `workspace:*` references in package.json files
-5. **Cascades** dependencies based on mode (see below)
-6. **Bumps versions** in package.json files
-7. **Commits and tags** (optional) with conventional commit message
+3. **Detects changes** per-package by comparing files since each package's last release tag
+4. **Bumps versions** in package.json files
+5. **Commits and tags** (optional) with conventional commit message
 
-### Cascade Modes
+### Two Modes
 
-**Auto-detect mode** (no packages specified):
-- Cascades UP to dependents
-- If `pkg-a` changed, also bump packages that depend on `pkg-a`
-- Use for: CI/release workflows where you want all affected packages bumped
+**Auto-detect mode** (`monobump`):
+- Bumps only packages with file changes since their last tag
+- No cascading - each package is independent
+- Use for: Regular releases after selective releases are done
 
-**Explicit mode** (packages specified):
-- Cascades DOWN to dependencies
-- If you specify `pkg-b`, also bump its dependencies that have unpublished changes
-- Use for: Selective releases where you want precise control
-- Ensures published packages reference valid dependency versions
+**Explicit mode** (`monobump pkg-a pkg-b`):
+- Bumps specified packages + their dependencies that have unpublished changes
+- Ensures you don't publish a package referencing unreleased dependency versions
+- Use for: Selective releases (e.g., releasing one package to alpha)
 
 ## Requirements
 
@@ -104,31 +101,35 @@ Usage: monobump [options] [packages...]
 
 ## Example Workflows
 
-### Full release (auto-detect)
+### Full release
 
 ```bash
-# 1. Make changes to your packages
-# 2. Preview what will be bumped
+# Preview what will be bumped
 monobump --dry-run
 
-# 3. Bump versions, commit, and tag
+# Bump versions, commit, and tag
 monobump
 
-# 4. Push to remote
+# Push to remote
 git push --follow-tags
 # or do it all at once:
 monobump --push
 ```
 
-### Selective release
+### Selective release with mixed versions
 
 ```bash
-# Bump only specific packages (and their changed dependencies)
-monobump my-cli-tool --dry-run
-monobump my-cli-tool
-
-# Release an alpha version of one package
+# Release one package to alpha
 monobump my-new-feature --alpha
+git push --follow-tags
+
+# Release another package to patch
+monobump my-cli-tool
+git push --follow-tags
+
+# Later, release everything else
+monobump
+git push --follow-tags
 ```
 
 ## License

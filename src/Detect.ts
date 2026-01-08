@@ -28,6 +28,25 @@ export async function findLastReleaseCommit(
   }
 }
 
+/** Find the last release tag for a specific package */
+export async function findLastPackageTag(
+  packageName: string,
+  cwd: string = process.cwd(),
+): Promise<string | null> {
+  try {
+    // Tags are formatted as "packageName@version"
+    // Get most recent tag matching this package
+    const { stdout } = await exec(
+      `git tag --list "${packageName}@*" --sort=-version:refname`,
+      { cwd },
+    );
+    const tags = stdout.trim().split("\n").filter(Boolean);
+    return tags.length > 0 ? tags[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Get all files changed since a specific commit */
 export async function getChangedFiles(
   since: string | null,
@@ -156,9 +175,40 @@ export async function detectChangedPackages(
   packages: Package[],
   cwd: string = process.cwd(),
 ): Promise<{ changed: Set<string>; commits: CommitInfo[] }> {
+  const changed = new Set<string>();
+  const allCommits: CommitInfo[] = [];
+
+  // Check each package individually against its own last release tag
+  for (const pkg of packages) {
+    const lastTag = await findLastPackageTag(pkg.name, cwd);
+    const hasChanges = await packageHasChanges(pkg, lastTag, cwd);
+    if (hasChanges) {
+      changed.add(pkg.name);
+    }
+  }
+
+  // Get overall commit history for changelog (use global last release)
   const lastRelease = await findLastReleaseCommit(cwd);
-  const changedFiles = await getChangedFiles(lastRelease, cwd);
   const commits = await getCommitHistory(lastRelease, cwd);
-  const changed = await mapFilesToPackages(changedFiles, packages, cwd);
+
   return { changed, commits };
+}
+
+/** Check if a package has changes since its last tag */
+async function packageHasChanges(
+  pkg: Package,
+  lastTag: string | null,
+  cwd: string,
+): Promise<boolean> {
+  try {
+    const range = lastTag ? `${lastTag}..HEAD` : `$(git rev-list --max-parents=0 HEAD)..HEAD`;
+    const pkgRelPath = path.relative(cwd, pkg.path);
+    const { stdout } = await exec(
+      `git diff --name-only ${range} -- "${pkgRelPath}"`,
+      { cwd },
+    );
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
 }

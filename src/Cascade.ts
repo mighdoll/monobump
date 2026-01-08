@@ -140,29 +140,25 @@ export async function getPackagesWithChangedDeps(
   return { toBump, reasons };
 }
 
-/** Get packages to bump: changed packages + their dependents, excluding private packages */
+/** Get packages to bump: only changed packages, excluding private packages (no cascade) */
 export async function getPackagesToBump(
   packages: Package[],
   changedPackages: Set<string>,
 ): Promise<{ toBump: Set<string>; reasons: Map<string, string> }> {
   const publicPackages = packages.filter(pkg => !pkg.private);
   const publicPackageNames = new Set(publicPackages.map(pkg => pkg.name));
-  const changedPublicPackages = new Set(
+
+  // Only bump changed public packages - no cascade UP
+  const toBump = new Set(
     [...changedPackages].filter(name => publicPackageNames.has(name)),
   );
 
-  const graph = await buildDependencyGraph(publicPackages);
-  const { allAffected, dependencyReasons } = findDependents(
-    graph,
-    changedPublicPackages,
-  );
-  const reasons = buildReasonStrings(
-    allAffected,
-    changedPublicPackages,
-    dependencyReasons,
-  );
+  const reasons = new Map<string, string>();
+  for (const name of toBump) {
+    reasons.set(name, "changed");
+  }
 
-  return { toBump: allAffected, reasons };
+  return { toBump, reasons };
 }
 
 function buildReasonStrings(

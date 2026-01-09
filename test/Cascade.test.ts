@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { bumpPackages } from "../src/Bump.ts";
-import { getPackagesToBump } from "../src/Cascade.ts";
+import { getPackagesToBump, getPackagesWithChangedDeps } from "../src/Cascade.ts";
 import { detectChangedPackages } from "../src/Detect.ts";
 import { findWorkspacePackages } from "../src/Pnpm.ts";
 import {
@@ -189,6 +189,38 @@ describe("monobump cascade logic", () => {
     expect(reasons.get("pkg-a")).toBe("changed");
     expect(reasons.get("pkg-b")).toBe("depends on pkg-a");
     expect(reasons.get("pkg-c")).toBe("depends on pkg-b -> pkg-a");
+  });
+
+  it("should skip private dependencies in explicit mode", async () => {
+    const repo = await createTestMonorepo([
+      {
+        name: "pkg-public",
+        version: "1.0.0",
+        dependencies: { "pkg-private": "workspace:*" },
+      },
+      { name: "pkg-private", version: "1.0.0", private: true },
+    ]);
+    cleanups.push(repo.cleanup);
+
+    await createReleaseCommit(repo.root, "1.0.0");
+
+    // Change the private package
+    await writeFileAndCommit(
+      repo.root,
+      "packages/pkg-private/index.ts",
+      "export const x = 1;",
+      "Change private",
+    );
+
+    const packages = await findWorkspacePackages(repo.root);
+    const { changed } = await detectChangedPackages(packages, repo.root);
+
+    // Explicit mode: bump pkg-public, should NOT include private dependency
+    const specified = new Set(["pkg-public"]);
+    const { toBump } = await getPackagesWithChangedDeps(packages, specified, changed);
+
+    expect(toBump.has("pkg-public")).toBe(true);
+    expect(toBump.has("pkg-private")).toBe(false);
   });
 
   it("should detect changes in single-package repo at root", async () => {

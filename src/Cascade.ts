@@ -84,7 +84,9 @@ export async function getPackagesWithChangedDeps(
       if (!pkg) continue;
 
       for (const depName of pkg.dependencies) {
-        if (changedPackages.has(depName) && !toBump.has(depName)) {
+        const isPublicWithChanges =
+          publicPackageNames.has(depName) && changedPackages.has(depName);
+        if (isPublicWithChanges && !toBump.has(depName)) {
           toBump.add(depName);
           reasons.set(depName, `dependency of ${pkgName}`);
           hasChanges = true;
